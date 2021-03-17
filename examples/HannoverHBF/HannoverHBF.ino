@@ -15,6 +15,7 @@ void setup() {
 	}
 	Serial.println();
 	DBstation* station = db.getStation("Hannover Hbf");
+	yield();
 	if (station != NULL) {
 		Serial.println();
 		Serial.print("Name:      ");
@@ -27,6 +28,7 @@ void setup() {
 		Serial.println(station->longitude);
 		DBdeparr* da = db.getDepatures(station->stationId, NULL, NULL, NULL, 0, PROD_ICE | PROD_IC_EC | PROD_IR | PROD_RE | PROD_S);
 		while (da != NULL) {
+			yield();
 			Serial.println();
 			Serial.print("Date:     ");
 			Serial.println(da->date);
