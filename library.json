@@ -1,0 +1,21 @@
+{
+    "name": "DBAPI",
+    "version": "1.0.0",
+    "description": "Hacon/Hafas/DB API for ESP8266 / ESP32 (WiFiClientSecure)",
+    "keywords": "train, deutsche bahn, travel",
+    "repository":
+    {
+      "type": "git",
+      "url": "https://github.com/ArduinoHannover/DBAPI.git"
+    },
+    "authors":
+    [
+      {
+        "name": "Luca Zimmermann",
+        "url": "https://github.com/soundstorm"
+      }
+    ],
+    "license": "GPL-3.0-only",
+    "frameworks": "Arduino",
+    "platforms": ["espressif8266", "espressif32"]
+  }
