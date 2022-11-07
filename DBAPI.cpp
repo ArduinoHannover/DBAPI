@@ -130,7 +130,7 @@ DBdeparr* DBAPI::getStationBoard(
 		}
 	}
 	if (target != NULL) {
-		qString += String("&Z=") + target;
+		qString += String("&dirInput=") + target;
 	}
 	if (num != 0) {
 		qString += String("&maxJourneys=") + num;

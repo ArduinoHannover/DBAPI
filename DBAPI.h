@@ -7,7 +7,7 @@ struct DBdeparr {
 	char      time[6];
 	char      date[9];
 	char      textdelay[10];
-	int16_t  delay;
+	int16_t   delay;
 	char      platform[8]; 
 	char      newPlatform[8]; 
 	char      target[50];
