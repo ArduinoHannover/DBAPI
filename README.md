@@ -1,6 +1,9 @@
 # DBAPI
 Hacon/Hafas/Deutsche Bahn API für ESP8266
 
+![tft_hannover_hbf](https://user-images.githubusercontent.com/193273/200298925-0f80dfdb-e17f-4f26-a28f-67b808540332.jpg)
+Abfartstafel aus dem DBTFT Beispiel
+
 ## Abfrage
 
 ### Stationen
@@ -69,12 +72,13 @@ Mittels bitweiser Oder-Verknüpfung (`|`) können mehrere Verkehrsmittel angefra
 | --- | --- | --- |
 | `time` | `char[6]` | Zeit im Format `HH:MM` |
 | `date` | `char[9]` | Datum im Format `dd.mm.yy` |
-| `textdelay` | `char[5]` | Verspätung als Text (`-` oder `+xxx`; je nach Verfügbarkeit im Verkehrsverbund) |
-| `delay` | `uint16_t` | Verspätung als Zahl |
-| `platform` | `char[5]` | Gleis |
+| `textdelay` | `char[10]` | Verspätung als Text (leer/`-` oder `+ xxx`; je nach Verfügbarkeit im Verkehrsverbund), `cancel` bei Ausfall |
+| `delay` | `int16_t` | Verspätung als Zahl |
+| `platform` | `char[8]` | Gleis |
 | `target` | `char[50]` | Zielhaltestelle |
-| `product` | `char[5]` | Bezeichnung des Verkehrsmittels |
+| `product` | `char[12]` | Bezeichnung des Verkehrsmittels |
 | `line` | `uint16_t` | Liniennummer |
+| `textline` | char[8] | Liniennummer als String (kann z.B. auch `SEV` sein) |
 | `next` | `DBdeparr*` | Nächste Fahrt in Liste |
 
 ### Hinweise zur Datenstruktur
@@ -85,8 +89,6 @@ Werden etwa Ankunft *und* Abfahrt eines Bahnhofs angefragt, so ist nur das `DBde
 
 Mittels `for (; t != NULL; t = t->next) {...}` kann über die Stationen bzw. Fahrten iteriert werden (`t` vom Typ einer der beiden obigen Datenstrukturen).
 Soll die Referenz auf den Anfang nicht verloren gehen, so muss `t` mittels `Type* t = orig_t;` erstellt werden.
-
-Verspätungen über 999 Minuten können nicht in Textform ausgegeben werden.
 
 ## Rechtliche Hinweise
 Die Bibliothek fragt direkt die Deutsche Bahn Schnittstelle an.
