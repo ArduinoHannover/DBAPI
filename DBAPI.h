@@ -2,17 +2,18 @@
 #define DBAPI_H
 
 #include <Arduino.h>
-#include <WiFiClientSecure.h>
 
 struct DBdeparr {
 	char      time[6];
 	char      date[9];
-	char      textdelay[5];
-	uint16_t  delay;
-	char      platform[5]; 
+	char      textdelay[10];
+	int16_t  delay;
+	char      platform[8]; 
+	char      newPlatform[8]; 
 	char      target[50];
-	char      product[5];
+	char      product[12];
 	uint16_t  line;
+	char      textline[8];
 	DBdeparr* next;
 };
 
@@ -44,6 +45,7 @@ class DBAPI {
 		String getIParam(String haystack, const char* param);
 		DBdeparr*  deparr   = NULL;
 		DBstation* stations = NULL;
+		bool agfx           = false;
 	public:
 		DBAPI();
 		DBstation* getStation(
@@ -82,6 +84,8 @@ class DBAPI {
 			uint8_t     num           =    0,
 			uint16_t    productFilter = 1023
 		);
+		// Output Adafruit GFX compatible Umlauts for default font
+		void setAGFXOutput(bool gfx);
 		
 	
 };

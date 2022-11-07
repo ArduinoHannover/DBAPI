@@ -1,4 +1,11 @@
 #include "DBAPI.h"
+#include <WiFiClientSecure.h>
+
+#ifdef DEBUG_ESP_PORT
+#define DB_DEBUG_MSG(...) DEBUG_ESP_PORT.printf( __VA_ARGS__ )
+#else
+#define DB_DEBUG_MSG(...)
+#endif
 
 DBAPI::DBAPI() {
 
@@ -45,6 +52,7 @@ DBstation* DBAPI::getStation(
 	WiFiClientSecure client;
 	client.setInsecure(); // Don't check fingerprint
 	if (!client.connect(host, 443)) {
+		DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
 		return NULL;
 	}
 	String xml = String("<?xml version=\"1.0\" encoding=\"utf-8\" ?>\r\n<ReqC ver=\"1.1\" prod=\"String\" lang=\"DE\">\r\n") +
@@ -67,6 +75,7 @@ DBstation* DBAPI::getStation(
 		while (client.available()) {
 			if (client.read() == '<') {
 				if (client.read() == 'S') {
+					DB_DEBUG_MSG("DBAPI: Parsing new Station.\n");
 					break; // hopefully got <S (tation >) beginning
 				}
 			}
@@ -135,9 +144,11 @@ DBdeparr* DBAPI::getStationBoard(
 	WiFiClientSecure client;
 	client.setInsecure(); // Don't check fingerprint
 	if (!client.connect(host, 443)) {
+		DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
 		return NULL;
 	}
 	
+	DB_DEBUG_MSG("DBAPI: Requesting StationBoard.\n");
 	client.print(String("GET /bin/stboard.exe/dn?start=yes&L=vs_java3&productsFilter=") + products + "&input=" + stationId + "&boardType=" + type + qString + " HTTP/1.1\r\n" +
 		"Host: " + host + "\r\n" +
 		"Connection: close\r\n\r\n");
@@ -152,11 +163,14 @@ DBdeparr* DBAPI::getStationBoard(
 		while (client.available()) {
 			if (client.read() == '<') {
 				if (client.read() == 'J') {
+					DB_DEBUG_MSG("DBAPI: Parsing new Journey.\n");
 					break; // hopefully got <J (ourney >) beginning
 				}
 			}
 		}
-		if (!client.available()) break;
+		if (!client.available()) {
+			break;
+		}
 		
 		DBdeparr* da = new DBdeparr();
 		String journey = client.readStringUntil('>');
@@ -165,24 +179,53 @@ DBdeparr* DBAPI::getStationBoard(
 		String targ = getXMLParam(journey, "targetLoc");
 		targ.replace("&#x0028;", "(");
 		targ.replace("&#x0029;", ")");
-		targ.replace("\xdf", "ss");
-		targ.replace("\xc4", "Ae");
-		targ.replace("\xd6", "Oe");
-		targ.replace("\xdc", "Ue");
-		targ.replace("\xe4", "ae");
-		targ.replace("\xf6", "oe");
-		targ.replace("\xfc", "ue");
+		// Replace Umlauts for Adafruit GFX
+		targ.replace("\xdf", agfx ? "\xE0" : "ss");
+		targ.replace("\xc4", agfx ? "\x8E" : "Ae");
+		targ.replace("\xd6", agfx ? "\x99" : "Oe");
+		targ.replace("\xdc", agfx ? "\x9A" : "Ue");
+		targ.replace("\xe4", agfx ? "\x84" : "ae");
+		targ.replace("\xf6", agfx ? "\x94" : "oe");
+		targ.replace("\xfc", agfx ? "\x81" : "ue");
 		targ.toCharArray(da->target, sizeof(DBdeparr::target));
 		String prod = getXMLParam(journey, "prod");
-		da->line = atol(prod.substring(prod.indexOf(' '), prod.indexOf('#')).c_str());
-		prod.substring(0, prod.indexOf(' ')).toCharArray(da->product, sizeof(DBdeparr::product));
+		// Extract number from prod tag
+		uint8_t chpos = 255;
+		for (char c = '1'; c <= '9'; c++) {
+			uint8_t pos = prod.indexOf(c);
+			if (pos < chpos) {
+				chpos = pos;
+			}
+		}
+		if ((uint8_t)prod.indexOf(' ') < chpos) {
+			chpos = prod.indexOf(' ');
+		}
+		// Extract line
+		da->line = atol(prod.substring(chpos, prod.indexOf('#')).c_str());
+		// Lines could be text like SEV, so also outputting the textform
+		// For backwards compatibility not replacing line param
+		String textline = prod.substring(chpos, prod.indexOf('#'));
+		textline.trim();
+		textline.toCharArray(da->textline, sizeof(DBdeparr::textline));
+		// Reduce to product name
+		prod = prod.substring(0, chpos);
+		prod.trim();
+		// If no number found, clip #...
+		prod.substring(0, prod.indexOf('#')).toCharArray(da->product, sizeof(DBdeparr::product));
+		// Extract delay String
 		getXMLParam(journey, "delay").toCharArray(da->textdelay, sizeof(DBdeparr::textdelay));
+		// Extract numeric delay
 		da->delay = atoi(getXMLParam(journey, "e_delay").c_str());
+		// Extract platform
 		getXMLParam(journey, "platform").toCharArray(da->platform, sizeof(DBdeparr::platform));
+		// Extract changed platform if there is any
+		getXMLParam(journey, "newpl").toCharArray(da->newPlatform, sizeof(DBdeparr::newPlatform));
 		da->next = NULL;
 		if (prev == NULL) {
+			DB_DEBUG_MSG("DBAPI: Got first depature.");
 			deparr = da;
 		} else {
+			DB_DEBUG_MSG("DBAPI: Got next depature.");
 			prev->next = da;
 		}
 		prev = da;
@@ -210,4 +253,8 @@ DBdeparr* DBAPI::getArrivals(
 		uint16_t    productFilter
 	) {
 	return getStationBoard("arr", stationId, target, Dtime, Ddate, num, productFilter);
+}
+
+void DBAPI::setAGFXOutput(bool gfx) {
+	agfx = gfx;
 }
