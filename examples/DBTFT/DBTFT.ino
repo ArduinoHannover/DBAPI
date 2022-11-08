@@ -17,14 +17,19 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 #define FOREGROUND_COLOR 0xFFFF // White
 #define HIGHLIGHT_COLOR  0xFFE0 // Yellow
 
-// Optional view with large destinations, does interfere with platform when station names are longer (implement scrolling?)
-//#define WIDE_MODE
+// Optional view with large destinations, does interfere with platform when station names are longer
+#define WIDE_MODE
+#define SCROLL_CHARS     13
+#define SCROLL_STALL      5
+#define SCROLL_INTERVAL 500
 
 DBAPI db;
 DBstation* fromStation;
 DBdeparr* da = NULL;
+DBdeparr* depature = NULL;
 uint32_t nextCheck;
 uint32_t nextTime;
+uint32_t nextScroll;
 time_t old_time;
 
 #define TFT_DC 4
@@ -73,6 +78,7 @@ void setup() {
 	tft.print("Gleis");
 }
 
+uint32_t scroll;
 void loop() {
 	if (nextTime < millis()) {
 		timeClient.update();
@@ -99,8 +105,9 @@ void loop() {
 		Serial.println("Reload");
 		da = db.getDepatures(fromStation->stationId, NULL, NULL, NULL, 11, PROD_RE | PROD_S);
 		Serial.println();
+		depature = da;
 		uint16_t pos = 21;
-	    while (da != NULL) {
+	    while (depature != NULL) {
 			pos += 18;
 			if (pos + 16 > tft.height()) break;
 #ifdef WIDE_MODE
@@ -111,61 +118,103 @@ void loop() {
 			tft.setTextColor(BACKGROUND_COLOR);
 			tft.setTextSize(1);
 			tft.setCursor(2, pos);
-			tft.print(da->time);
+			tft.print(depature->time);
 #ifdef WIDE_MODE
-			if (strcmp("cancel", da->textdelay) != 0 && strcmp("0", da->textdelay) != 0 && strcmp("-", da->textdelay) != 0) {
-				tft.print(da->textdelay);
+			if (strcmp("cancel", depature->textdelay) != 0 && strcmp("0", depature->textdelay) != 0 && strcmp("-", depature->textdelay) != 0) {
+				tft.print(depature->textdelay);
 			}
 #endif
 			tft.setCursor(2, pos + 8);
-			tft.print(da->product);
-			if (strcmp("", da->textline) != 0) {
+			tft.print(depature->product);
+			if (strcmp("", depature->textline) != 0) {
 				tft.write(' ');
-				tft.print(da->textline);
+				tft.print(depature->textline);
 			}
+			tft.setTextColor(FOREGROUND_COLOR);
 #ifdef WIDE_MODE
 			tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
-			tft.setCursor(11 * 6 + 6, pos);
-			tft.setTextSize(2);
+			printScroll(depature->target, 11 * 6 + 6, pos, true);
 #else
 			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
 			tft.setCursor(9 * 6 + 6, pos);
 			tft.setTextSize(1);
-
+			tft.print(depature->target);
 #endif
-			tft.setTextColor(FOREGROUND_COLOR);
-			tft.print(da->target);
+
 #ifdef WIDE_MODE
-			if (strcmp("cancel", da->textdelay) == 0) {
-				tft.drawFastHLine(11 * 6 + 6, pos + 6, (strlen(da->target) * 6 - 1) * 2, FOREGROUND_COLOR);
-				tft.drawFastHLine(11 * 6 + 6, pos + 7, (strlen(da->target) * 6 - 1) * 2, FOREGROUND_COLOR);
+			if (strcmp("cancel", depature->textdelay) == 0) {
+				tft.drawFastHLine(11 * 6 + 6, pos + 6, (strlen(depature->target) * 6 - 1) * 2, FOREGROUND_COLOR);
+				tft.drawFastHLine(11 * 6 + 6, pos + 7, (strlen(depature->target) * 6 - 1) * 2, FOREGROUND_COLOR);
 			}
 #else
 			tft.setTextColor(HIGHLIGHT_COLOR);
 			tft.setCursor(9 * 6 + 6, pos + 8);
-			if (strcmp("cancel", da->textdelay) == 0) {
+			if (strcmp("cancel", depature->textdelay) == 0) {
 				tft.print("Fahrt f\x84llt aus");
-				tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(da->target) * 6 - 1, FOREGROUND_COLOR);
-			} else if (strcmp("0", da->textdelay) != 0 && strcmp("-", da->textdelay) != 0) {
+				tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(depature->target) * 6 - 1, FOREGROUND_COLOR);
+			} else if (strcmp("0", depature->textdelay) != 0 && strcmp("-", depature->textdelay) != 0) {
 				tft.print("ca. ");
-				tft.print(da->delay);
+				tft.print(depature->delay);
 				tft.print(" Minuten sp\x84ter");
 			}
 #endif
 			tft.setTextColor(FOREGROUND_COLOR);
 			tft.setTextSize(2);
 			tft.setCursor(tft.width() - 7 * 6 * 2, pos);
-			if (strcmp("", da->newPlatform) != 0) {
+			if (strcmp("", depature->newPlatform) != 0) {
 				tft.setTextColor(HIGHLIGHT_COLOR);
-				tft.print(da->newPlatform);
+				tft.print(depature->newPlatform);
 			} else {
-				tft.print(da->platform);
+				tft.print(depature->platform);
 			}
-			da = da->next;
+			depature = depature->next;
 		}
 		nextCheck = millis() + 50000;
 	}
+#ifdef WIDE_MODE
+	if (nextScroll < millis()) {
+		depature = da;
+		uint16_t pos = 21;
+	    while (depature != NULL) {
+			pos += 18;
+			printScroll(depature->target, 11 * 6 + 6, pos, false);
+			depature = depature->next;
+		}
+		scroll++;
+		nextScroll = millis() + SCROLL_INTERVAL;
+	}
+#endif
 }
+
+#ifdef WIDE_MODE
+void printScroll(String text, uint16_t x, uint16_t y, bool force) {
+	if (text.length() > SCROLL_CHARS || force) {
+		uint32_t p = scroll;
+		int16_t ts = text.length() - SCROLL_CHARS;
+		if (ts < 0) {
+			ts = 0;
+		}
+		uint32_t to_scroll = ts;
+		p %= to_scroll * 2 + SCROLL_STALL * 2;
+		if (p <= to_scroll) {
+			if (!force && p == 0) return; // do not update 0 position
+		} else if (p <= to_scroll + SCROLL_STALL) {
+			p = to_scroll;
+			if (!force) return; // do not update on stall, if no update is forced
+		} else if (p <= to_scroll * 2 + SCROLL_STALL) {
+			p = SCROLL_STALL + to_scroll * 2 - p;
+		} else {
+			p = 0;
+			if (!force) return; // do not update on stall, if no update is forced
+		}
+		tft.fillRect(x - 2, y - 1, SCROLL_CHARS * 6 * 2, 17, BACKGROUND_COLOR);
+		tft.setCursor(x, y);
+		tft.setTextSize(2);
+		text = text.substring(p, p + SCROLL_CHARS);
+		tft.print(text);
+	}
+}
+#endif
 
 time_t dst(time_t t) {
 	if (month(t) > 3 && month(t) < 10) { //Apr-Sep
