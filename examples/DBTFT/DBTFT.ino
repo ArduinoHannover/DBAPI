@@ -98,7 +98,6 @@ void loop() {
 		}
 		Serial.println("Reload");
 		da = db.getDepatures(fromStation->stationId, NULL, NULL, NULL, 11, PROD_RE | PROD_S);
-		s = 0;
 		Serial.println();
 		uint16_t pos = 21;
 	    while (da != NULL) {
