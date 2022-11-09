@@ -121,6 +121,7 @@ void loop() {
 			tft.print(depature->time);
 #ifdef WIDE_MODE
 			if (strcmp("cancel", depature->textdelay) != 0 && strcmp("0", depature->textdelay) != 0 && strcmp("-", depature->textdelay) != 0) {
+				tft.write(' ');
 				tft.print(depature->textdelay);
 			}
 #endif
