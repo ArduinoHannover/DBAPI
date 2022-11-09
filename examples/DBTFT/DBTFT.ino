@@ -188,6 +188,8 @@ void loop() {
 
 #ifdef WIDE_MODE
 void printScroll(String text, uint16_t x, uint16_t y, bool force) {
+	tft.setTextSize(2);
+	tft.setTextColor(FOREGROUND_COLOR);
 	if (text.length() > SCROLL_CHARS || force) {
 		uint32_t p = scroll;
 		int16_t ts = text.length() - SCROLL_CHARS;
@@ -209,7 +211,6 @@ void printScroll(String text, uint16_t x, uint16_t y, bool force) {
 		}
 		tft.fillRect(x - 2, y - 1, SCROLL_CHARS * 6 * 2, 17, BACKGROUND_COLOR);
 		tft.setCursor(x, y);
-		tft.setTextSize(2);
 		text = text.substring(p, p + SCROLL_CHARS);
 		tft.print(text);
 	}
