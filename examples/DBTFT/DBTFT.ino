@@ -232,7 +232,7 @@ time_t dst(time_t t) {
 		return t + 3600;
 	} else if (month(t) == 10 && day(t) - weekday(t) >= 24) { //Date at or after last sunday in March
 		if (weekday(t) == 1) { //Sunday to switch back from dst
-			if (hour(t) < 3) { //Time before 2AM without DST (3AM DST, wich doesn't exist)
+			if (hour(t) < 3) { //Time before 2AM without DST (3AM DST, which doesn't exist)
 				return t + 3600;
 			}
 		}
