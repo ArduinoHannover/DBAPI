@@ -22,6 +22,8 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 #define SCROLL_CHARS     13
 #define SCROLL_STALL      5
 #define SCROLL_INTERVAL 400
+//#define SCROLLING_ENABLED
+//#define TEXT_FILL
 
 DBAPI db;
 DBstation* fromStation;
@@ -34,6 +36,7 @@ time_t old_time;
 
 #define TFT_DC 16
 #define TFT_CS 15
+#define TFT_BL  5
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 
 void setup() {
@@ -41,6 +44,8 @@ void setup() {
 	tft.begin();
 	WiFi.mode(WIFI_STA);
 	WiFi.begin(ssid, password);
+	pinMode(TFT_BL, OUTPUT);
+	digitalWrite(TFT_BL, HIGH);
 	tft.fillScreen(BACKGROUND_COLOR);
 	tft.setTextColor(FOREGROUND_COLOR);
 	tft.setRotation(1);
@@ -71,9 +76,9 @@ void setup() {
 	tft.print("Zeit");
 #ifdef WIDE_MODE
 	tft.setCursor(11 * 6 + 6, 20);
-#else
+#else // WIDE_MODE
 	tft.setCursor(9 * 6 + 6, 20);
-#endif
+#endif // WIDE_MODE
 	tft.print("Nach");
 	tft.setCursor(tft.width() - 7 * 6 * 2, 20);
 	tft.print("Gleis");
@@ -113,9 +118,9 @@ void loop() {
 			if (pos + 16 > tft.height()) break;
 #ifdef WIDE_MODE
 			tft.fillRect(0, pos - 1, 11 * 6 + 4 , 17, FOREGROUND_COLOR);
-#else
+#else // WIDE_MODE
 			tft.fillRect(0, pos - 1, 9 * 6 + 4 , 17, FOREGROUND_COLOR);
-#endif
+#endif // WIDE_MODE
 			tft.setTextColor(BACKGROUND_COLOR);
 			tft.setTextSize(1);
 			tft.setCursor(2, pos);
@@ -125,7 +130,7 @@ void loop() {
 				tft.write(' ');
 				tft.print(depature->textdelay);
 			}
-#endif
+#endif // WIDE_MODE
 			tft.setCursor(2, pos + 8);
 			tft.print(depature->product);
 			if (strcmp("", depature->textline) != 0) {
@@ -136,12 +141,12 @@ void loop() {
 #ifdef WIDE_MODE
 			tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
 			printScroll(depature->target, 11 * 6 + 6, pos, true, strcmp("cancel", depature->textdelay) == 0);
-#else
+#else // WIDE_MODE
 			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
 			tft.setCursor(9 * 6 + 6, pos);
 			tft.setTextSize(1);
 			tft.print(depature->target);
-#endif
+#endif // WIDE_MODE
 
 #ifndef WIDE_MODE
 			tft.setTextColor(HIGHLIGHT_COLOR);
@@ -160,6 +165,7 @@ void loop() {
 			tft.setCursor(tft.width() - 7 * 6 * 2, pos);
 			if (strcmp("", depature->newPlatform) != 0) {
 				tft.setTextColor(HIGHLIGHT_COLOR);
+				tft.print("->");
 				tft.print(depature->newPlatform);
 			} else {
 				tft.print(depature->platform);
@@ -184,9 +190,14 @@ void loop() {
 }
 
 void printScroll(String text, uint16_t x, uint16_t y, bool force, bool cancelled) {
+#ifdef TEXT_FILL
+	tft.setTextColor(FOREGROUND_COLOR, BACKGROUND_COLOR);
+#else // TEXT_FILL
 	tft.setTextColor(FOREGROUND_COLOR);
+#endif // TEXT_FILL
 	tft.setTextSize(2);
 	if (text.length() > SCROLL_CHARS || force) {
+#ifdef SCROLLING_ENABLED
 		uint32_t p = scroll;
 		int16_t ts = text.length() - SCROLL_CHARS;
 		if (ts < 0) {
@@ -205,7 +216,13 @@ void printScroll(String text, uint16_t x, uint16_t y, bool force, bool cancelled
 			p = 0;
 			if (!force) return; // do not update on stall, if no update is forced
 		}
+#else // SCOLLING_ENABLED
+		if (!force) return;
+		uint32_t p = 0;
+#endif // SCROLLING_ENABLED
+#ifndef TEXT_FILL
 		tft.fillRect(x - 2, y - 1, SCROLL_CHARS * 6 * 2, 17, BACKGROUND_COLOR);
+#endif // TEXT_FILL
 		tft.setCursor(x, y);
 		text = text.substring(p, p + SCROLL_CHARS);
 		tft.print(text);
