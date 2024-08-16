@@ -165,7 +165,7 @@ void loop() {
 			tft.setCursor(tft.width() - 7 * 6 * 2, pos);
 			if (strcmp("", depature->newPlatform) != 0) {
 				tft.setTextColor(HIGHLIGHT_COLOR);
-				tft.print("->");
+				tft.print("->");äü
 				tft.print(depature->newPlatform);
 			} else {
 				tft.print(depature->platform);
