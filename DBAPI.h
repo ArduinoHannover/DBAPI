@@ -2,26 +2,27 @@
 #define DBAPI_H
 
 #include <Arduino.h>
+#include <TimeLib.h>
 
 struct DBdeparr {
-	char      time[6];
-	char      date[9];
-	char      textdelay[10];
+	time_t    time;
+	time_t    realTime;
 	int16_t   delay;
-	char      platform[8]; 
+	bool      cancelled;
+	char      platform[8];
 	char      newPlatform[8]; 
 	char      target[50];
 	char      product[12];
 	uint16_t  line;
-	char      textline[8];
+	char      textline[20]; //Apperently there are services like Bus 5/43, so no numeric value
 	DBdeparr* next;
 };
 
 struct DBstation {
 	char       name[30];
-	char       stationId[11];
-	uint32_t   longitude;
-	uint32_t   latitude;
+	char       stationId[150];
+	float      longitude;
+	float      latitude;
 	DBstation* next;
 };
 
@@ -40,12 +41,12 @@ enum DBproduct {
 
 class DBAPI {
 	private:
-		const char* host = "reiseauskunft.bahn.de";
-		String getXMLParam(String haystack, const char* param);
-		String getIParam(String haystack, const char* param);
+		const char* host = "app.vendo.noncd.db.de";
+		time_t parseTime(String t);
 		DBdeparr*  deparr   = NULL;
 		DBstation* stations = NULL;
 		bool agfx           = false;
+		static const char* services[];
 	public:
 		DBAPI();
 		DBstation* getStation(
@@ -86,8 +87,6 @@ class DBAPI {
 		);
 		// Output Adafruit GFX compatible Umlauts for default font
 		void setAGFXOutput(bool gfx);
-		
-	
 };
 
 #endif //DBAPI_H

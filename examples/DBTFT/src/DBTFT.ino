@@ -124,11 +124,13 @@ void loop() {
 			tft.setTextColor(BACKGROUND_COLOR);
 			tft.setTextSize(1);
 			tft.setCursor(2, pos);
-			tft.print(depature->time);
+			char buf[6];
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(depature->time), minute(depature->time));
+			tft.print(buf);
 #ifdef WIDE_MODE
-			if (strcmp("cancel", depature->textdelay) != 0 && strcmp("0", depature->textdelay) != 0 && strcmp("-", depature->textdelay) != 0) {
-				tft.write(' ');
-				tft.print(depature->textdelay);
+			if (!depature->cancelled && depature->delay) {
+				tft.print(" +");
+				tft.print(depature->delay);
 			}
 #endif // WIDE_MODE
 			tft.setCursor(2, pos + 8);
@@ -140,9 +142,9 @@ void loop() {
 			tft.setTextColor(FOREGROUND_COLOR);
 #ifdef WIDE_MODE
 			tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
-			printScroll(depature->target, 11 * 6 + 6, pos, true, strcmp("cancel", depature->textdelay) == 0);
+			printScroll(depature->target, 11 * 6 + 6, pos, true, depature->cancelled);
 #else // WIDE_MODE
-			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
+s			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
 			tft.setCursor(9 * 6 + 6, pos);
 			tft.setTextSize(1);
 			tft.print(depature->target);
@@ -151,10 +153,10 @@ void loop() {
 #ifndef WIDE_MODE
 			tft.setTextColor(HIGHLIGHT_COLOR);
 			tft.setCursor(9 * 6 + 6, pos + 8);
-			if (strcmp("cancel", depature->textdelay) == 0) {
+			if (depature->cancelled) {
 				tft.print("Fahrt f\x84llt aus");
 				tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(depature->target) * 6 - 1, FOREGROUND_COLOR);
-			} else if (strcmp("0", depature->textdelay) != 0 && strcmp("-", depature->textdelay) != 0) {
+			} else if (depature->delay) {
 				tft.print("ca. ");
 				tft.print(depature->delay);
 				tft.print(" Minuten sp\x84ter");
@@ -180,7 +182,7 @@ void loop() {
 		uint16_t pos = 21;
 	    while (depature != NULL) {
 			pos += 18;
-			printScroll(depature->target, 11 * 6 + 6, pos, false, strcmp("cancel", depature->textdelay) == 0);
+			printScroll(depature->target, 11 * 6 + 6, pos, false, depature->cancelled);
 			depature = depature->next;
 		}
 		scroll++;
