@@ -32,9 +32,9 @@ Daher muss i.d.R. erst einmal diese abgefragt werden (kann dann statisch im Code
 | --- | --- | --- | --- |
 | `type` | `char[4]` | | Kann entweder `dep` (Abfahrt) oder `arr` (Ankunft) sein. |
 | `stationID` | `char[11]` | | ID aus der `DBstation` |
-| `target` | `const char*` | `NULL` | Ziel oder Zwischenhalt (nur in eine Richtung Fahrten erhalten) |
+| `target` | `const char*` | `NULL` | entfallen |
 | `Dtime` | `const char*` | `NULL` | Zeit in `HH:MM` oder `NULL`/`actual` für "jetzt" |
-| `Ddate` | `const char*` | `NULL` | Datum in `dd.mm.yy` oder `NULL` für "heute" |
+| `Ddate` | `const char*` | `NULL` | Datum in `yyyy-mm-dd` oder `NULL` für "heute" |
 | `num` | `uint8_t` | `10` | Anzahl der Ergebnisse |
 | `productFilter` | `uint16_t` | `1023`/alle | Verkehrsmittel, die angezeigt werden sollen |
 
@@ -61,24 +61,25 @@ Mittels bitweiser Oder-Verknüpfung (`|`) können mehrere Verkehrsmittel angefra
 | Name | Typ | Funktion |
 | --- | --- | --- |
 | `name` | `char[30]` | Stationsname |
-| `stationId` | `char[11]` | Stations ID |
-| `longitude` | `uint32_t` | Längengrad (x 1000000) |
-| `latitude` |  `uint32_t` | Breitengrad (x 1000000) |
+| `stationId` | `char[50]` | Stations ID |
+| `longitude` | `float` | Längengrad |
+| `latitude` |  `float` | Breitengrad |
 | `next` | `DBstation*` | Nächste Station in der Liste |
 
 ### `DBdeparr`
 
 | Name | Typ | Funktion |
 | --- | --- | --- |
-| `time` | `char[6]` | Zeit im Format `HH:MM` |
-| `date` | `char[9]` | Datum im Format `dd.mm.yy` |
-| `textdelay` | `char[10]` | Verspätung als Text (leer/`-` oder `+ xxx`; je nach Verfügbarkeit im Verkehrsverbund), `cancel` bei Ausfall |
-| `delay` | `int16_t` | Verspätung als Zahl |
-| `platform` | `char[8]` | Gleis |
+| `time` | `time_t` | Reguläre Abfahrtszeit als Unix-Timestamp |
+| `realTime` | `time_t` | Tatsächliche Abfahrtszeit als Unix-Timestamp |
+| `delay` | `int16_t` | Verspätung |
+| `cancelled` | `bool` | Zug entfällt |
+| `platform` | `char[8]` | Geplantes Gleis |
+| `newPlatform` | `char[8]` | Tatsächliches Gleis, sofern geändert, sonst leer |
 | `target` | `char[50]` | Zielhaltestelle |
 | `product` | `char[12]` | Bezeichnung des Verkehrsmittels |
 | `line` | `uint16_t` | Liniennummer |
-| `textline` | char[8] | Liniennummer als String (kann z.B. auch `SEV` sein) |
+| `textline` | char[20] | Liniennummer als String (kann z.B. auch `SEV` sein) |
 | `next` | `DBdeparr*` | Nächste Fahrt in Liste |
 
 ### Hinweise zur Datenstruktur

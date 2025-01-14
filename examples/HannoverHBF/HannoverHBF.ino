@@ -33,7 +33,12 @@ void setup() {
 			Serial.print("Date:     ");
 			Serial.println(da->date);
 			Serial.print("Time:     ");
-			Serial.println(da->time);
+			char buf[6];
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(depature->time), minute(depature->time));
+			Serial.println(buf);
+			Serial.print("Realtime: ");
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(depature->realTime), minute(depature->realTime));
+			Serial.println(buf);
 			Serial.print("Product:  ");
 			Serial.println(da->product);
 			Serial.print("Line:     ");
@@ -42,8 +47,6 @@ void setup() {
 			Serial.println(da->target);
 			Serial.print("Delay:    ");
 			Serial.println(da->delay);
-			Serial.print("Delay:    ");
-			Serial.println(da->textdelay);
 			Serial.print("Platform: ");
 			Serial.println(da->platform);
 			da = da->next;

@@ -22,6 +22,7 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 #define SCROLL_CHARS     13
 #define SCROLL_STALL      5
 #define SCROLL_INTERVAL 400
+#define NO_SCROLL         1
 
 DBAPI db;
 DBstation* fromStation;
@@ -119,11 +120,13 @@ void loop() {
 			tft.setTextColor(BACKGROUND_COLOR);
 			tft.setTextSize(1);
 			tft.setCursor(2, pos);
-			tft.print(depature->time);
+			char buf[6];
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(depature->time), minute(depature->time));
+			tft.print(buf);
 #ifdef WIDE_MODE
-			if (strcmp("cancel", depature->textdelay) != 0 && strcmp("0", depature->textdelay) != 0 && strcmp("-", depature->textdelay) != 0) {
-				tft.write(' ');
-				tft.print(depature->textdelay);
+			if (!depature->cancelled && depature->delay) {
+				tft.print(" +");
+				tft.print(depature->delay);
 			}
 #endif
 			tft.setCursor(2, pos + 8);
@@ -135,7 +138,7 @@ void loop() {
 			tft.setTextColor(FOREGROUND_COLOR);
 #ifdef WIDE_MODE
 			tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
-			printScroll(depature->target, 11 * 6 + 6, pos, true, strcmp("cancel", depature->textdelay) == 0);
+			printScroll(depature->target, 11 * 6 + 6, pos, true, depature->cancelled);
 #else
 			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
 			tft.setCursor(9 * 6 + 6, pos);
@@ -146,10 +149,10 @@ void loop() {
 #ifndef WIDE_MODE
 			tft.setTextColor(HIGHLIGHT_COLOR);
 			tft.setCursor(9 * 6 + 6, pos + 8);
-			if (strcmp("cancel", depature->textdelay) == 0) {
+			if (depature->cancelled) {
 				tft.print("Fahrt f\x84llt aus");
 				tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(depature->target) * 6 - 1, FOREGROUND_COLOR);
-			} else if (strcmp("0", depature->textdelay) != 0 && strcmp("-", depature->textdelay) != 0) {
+			} else if (depature->delay) {
 				tft.print("ca. ");
 				tft.print(depature->delay);
 				tft.print(" Minuten sp\x84ter");
@@ -174,7 +177,7 @@ void loop() {
 		uint16_t pos = 21;
 	    while (depature != NULL) {
 			pos += 18;
-			printScroll(depature->target, 11 * 6 + 6, pos, false, strcmp("cancel", depature->textdelay) == 0);
+			printScroll(depature->target, 11 * 6 + 6, pos, false, depature->cancelled);
 			depature = depature->next;
 		}
 		scroll++;
@@ -187,6 +190,7 @@ void printScroll(String text, uint16_t x, uint16_t y, bool force, bool cancelled
 	tft.setTextColor(FOREGROUND_COLOR);
 	tft.setTextSize(2);
 	if (text.length() > SCROLL_CHARS || force) {
+#if (NO_SCROLL == 0)
 		uint32_t p = scroll;
 		int16_t ts = text.length() - SCROLL_CHARS;
 		if (ts < 0) {
@@ -205,6 +209,10 @@ void printScroll(String text, uint16_t x, uint16_t y, bool force, bool cancelled
 			p = 0;
 			if (!force) return; // do not update on stall, if no update is forced
 		}
+#else
+		if (!force) return;
+		uint32_t p = 0;
+#endif
 		tft.fillRect(x - 2, y - 1, SCROLL_CHARS * 6 * 2, 17, BACKGROUND_COLOR);
 		tft.setCursor(x, y);
 		text = text.substring(p, p + SCROLL_CHARS);
