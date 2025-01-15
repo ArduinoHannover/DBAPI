@@ -26,14 +26,15 @@ void setup() {
 		Serial.println(station->latitude);
 		Serial.print("Longitude: ");
 		Serial.println(station->longitude);
-		DBdeparr* da = db.getDepatures(station->stationId, NULL, NULL, NULL, 0, PROD_ICE | PROD_IC_EC | PROD_IR | PROD_RE | PROD_S);
+		DBdeparr* da = db.getDepartures(station->stationId, NULL, NULL, NULL, 0, PROD_ICE | PROD_IC_EC | PROD_IR | PROD_RE | PROD_S);
 		while (da != NULL) {
 			yield();
 			Serial.println();
 			Serial.print("Date:     ");
-			Serial.println(da->date);
+			char buf[11];
+			snprintf(buf, sizeof(buf), "%02d.%02d.%4d", day(depature->time), month(depature->time), year(depature->time) + 1970);
+			Serial.println(buf);
 			Serial.print("Time:     ");
-			char buf[6];
 			snprintf(buf, sizeof(buf), "%02d:%02d", hour(depature->time), minute(depature->time));
 			Serial.println(buf);
 			Serial.print("Realtime: ");

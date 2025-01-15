@@ -28,7 +28,7 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 DBAPI db;
 DBstation* fromStation;
 DBdeparr* da = NULL;
-DBdeparr* depature = NULL;
+DBdeparr* departure = NULL;
 uint32_t nextCheck;
 uint32_t nextTime;
 uint32_t nextScroll;
@@ -109,11 +109,11 @@ void loop() {
 			Serial.println("Disconnected");
 		}
 		Serial.println("Reload");
-		da = db.getDepatures(fromStation->stationId, NULL, NULL, NULL, 11, PROD_RE | PROD_S);
+		da = db.getDepartures(fromStation->stationId, NULL, NULL, NULL, 11, PROD_RE | PROD_S);
 		Serial.println();
-		depature = da;
+		departure = da;
 		uint16_t pos = 21;
-	    while (depature != NULL) {
+	    while (departure != NULL) {
 			pos += 18;
 			if (pos + 16 > tft.height()) break;
 #ifdef WIDE_MODE
@@ -125,65 +125,65 @@ void loop() {
 			tft.setTextSize(1);
 			tft.setCursor(2, pos);
 			char buf[6];
-			snprintf(buf, sizeof(buf), "%02d:%02d", hour(depature->time), minute(depature->time));
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(departure->time), minute(departure->time));
 			tft.print(buf);
 #ifdef WIDE_MODE
-			if (!depature->cancelled && depature->delay) {
+			if (!departure->cancelled && departure->delay) {
 				tft.print(" +");
-				tft.print(depature->delay);
+				tft.print(departure->delay);
 			}
 #endif // WIDE_MODE
 			tft.setCursor(2, pos + 8);
-			tft.print(depature->product);
-			if (strcmp("", depature->textline) != 0) {
+			tft.print(departure->product);
+			if (strcmp("", departure->textline) != 0) {
 				tft.write(' ');
-				tft.print(depature->textline);
+				tft.print(departure->textline);
 			}
 			tft.setTextColor(FOREGROUND_COLOR);
 #ifdef WIDE_MODE
 			tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
-			printScroll(depature->target, 11 * 6 + 6, pos, true, depature->cancelled);
+			printScroll(departure->target, 11 * 6 + 6, pos, true, departure->cancelled);
 #else // WIDE_MODE
 s			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
 			tft.setCursor(9 * 6 + 6, pos);
 			tft.setTextSize(1);
-			tft.print(depature->target);
+			tft.print(departure->target);
 #endif // WIDE_MODE
 
 #ifndef WIDE_MODE
 			tft.setTextColor(HIGHLIGHT_COLOR);
 			tft.setCursor(9 * 6 + 6, pos + 8);
-			if (depature->cancelled) {
+			if (departure->cancelled) {
 				tft.print("Fahrt f\x84llt aus");
-				tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(depature->target) * 6 - 1, FOREGROUND_COLOR);
-			} else if (depature->delay) {
+				tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(departure->target) * 6 - 1, FOREGROUND_COLOR);
+			} else if (departure->delay) {
 				tft.print("ca. ");
-				tft.print(depature->delay);
+				tft.print(departure->delay);
 				tft.print(" Minuten sp\x84ter");
 			}
 #endif
 			tft.setTextColor(FOREGROUND_COLOR);
 			tft.setTextSize(2);
 			tft.setCursor(tft.width() - 7 * 6 * 2, pos);
-			if (strcmp("", depature->newPlatform) != 0) {
+			if (strcmp("", departure->newPlatform) != 0) {
 				tft.setTextColor(HIGHLIGHT_COLOR);
-				tft.print("->");äü
-				tft.print(depature->newPlatform);
+				tft.print("->");
+				tft.print(departure->newPlatform);
 			} else {
-				tft.print(depature->platform);
+				tft.print(departure->platform);
 			}
-			depature = depature->next;
+			departure = departure->next;
 		}
 		nextCheck = millis() + 50000;
 	}
 #ifdef WIDE_MODE
 	if (nextScroll < millis()) {
-		depature = da;
+		departure = da;
 		uint16_t pos = 21;
-	    while (depature != NULL) {
+	    while (departure != NULL) {
 			pos += 18;
-			printScroll(depature->target, 11 * 6 + 6, pos, false, depature->cancelled);
-			depature = depature->next;
+			printScroll(departure->target, 11 * 6 + 6, pos, false, departure->cancelled);
+			departure = departure->next;
 		}
 		scroll++;
 		nextScroll = millis() + SCROLL_INTERVAL;

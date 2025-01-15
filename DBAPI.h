@@ -69,7 +69,7 @@ class DBAPI {
 			uint8_t     num           =    0,
 			uint16_t    productFilter = 1023
 		);
-		DBdeparr* getDepatures(
+		DBdeparr* getDepartures(
 			const char* stationId,
 			const char* target        = NULL,
 			const char* Dtime         = NULL,

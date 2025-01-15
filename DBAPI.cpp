@@ -12,25 +12,6 @@ DBAPI::DBAPI() {
 
 }
 
-String DBAPI::getXMLParam(String haystack, const char* param) {
-	String p = String(param) + "=\"";
-	int16_t pos = haystack.indexOf(p);
-	if (pos == -1) {
-		return String();
-	}
-	pos += p.length();
-	return haystack.substring(pos, haystack.indexOf('"', pos));
-}
-
-String DBAPI::getIParam(String haystack, const char* param) {
-	String p = String(param) + "=";
-	int16_t pos = haystack.indexOf(p);
-	if (pos == -1) {
-		return String();
-	}
-	pos += p.length();
-	return haystack.substring(pos, haystack.indexOf('@', pos));
-}
 
 DBstation* DBAPI::getStation(
 		const char* name,
@@ -66,13 +47,13 @@ DBstation* DBAPI::getStation(
 	
 	char endOfHeaders[] = "\r\n\r\n";
 	if (!client.find(endOfHeaders)) {
-		DB_DEBUG_MSG(F("Did not find headers\n"));
+		DB_DEBUG_MSG"Did not find headers\n");
 		return stations;
 	}
 	JsonDocument doc;
 	DeserializationError error = deserializeJson(doc, client);
 	if (error) {
-		DB_DEBUG_MSG(F("deserializeJson() on Station failed"));
+		DB_DEBUG_MSG("deserializeJson() on Station failed");
 		DB_DEBUG_MSG(error.f_str());
 		return stations;
 	}
@@ -156,7 +137,7 @@ DBdeparr* DBAPI::getStationBoard(
 		free(output);
 		char endOfHeaders[] = "\r\n\r\n";
 		if (!client.find(endOfHeaders)) {
-			DB_DEBUG_MSG(F("Did not find headers\n"));
+			DB_DEBUG_MSG("Did not find headers\n");
 			return deparr;
 		}
 	}
@@ -168,7 +149,7 @@ DBdeparr* DBAPI::getStationBoard(
 	do {
 		DeserializationError error = deserializeJson(doc, client);
 		if (error) {
-			DB_DEBUG_MSG(F("deserializeJson() on depatures/arrivals failed"));
+			DB_DEBUG_MSG("deserializeJson() on departures/arrivals failed");
 			DB_DEBUG_MSG(error.f_str());
 			return deparr;
 		}
@@ -225,10 +206,10 @@ DBdeparr* DBAPI::getStationBoard(
 
 		da->next = NULL;
 		if (prev == NULL) {
-			DB_DEBUG_MSG("DBAPI: Got first depature.");
+			DB_DEBUG_MSG("DBAPI: Got first departure.");
 			deparr = da;
 		} else {
-			DB_DEBUG_MSG("DBAPI: Got next depature.");
+			DB_DEBUG_MSG("DBAPI: Got next departure.");
 			prev->next = da;
 		}
 		prev = da;
@@ -249,7 +230,7 @@ time_t DBAPI::parseTime(String t) {
 	return makeTime(time);
 }
 
-DBdeparr* DBAPI::getDepatures(
+DBdeparr* DBAPI::getDepartures(
 		const char* stationId,
 		const char* target,
 		const char* Dtime,
