@@ -39,13 +39,19 @@ enum DBproduct {
 	PROD_AST     = 1 <<  0
 };
 
+enum DBumlaut {
+	REP_NONE,
+	REP_AGFX,
+	REP_UML
+};
+
 class DBAPI {
 	private:
 		const char* host = "app.vendo.noncd.db.de";
 		time_t parseTime(String t);
 		DBdeparr*  deparr   = NULL;
 		DBstation* stations = NULL;
-		bool agfx           = false;
+		enum DBUmlaut repum = REP_NONE;
 		static const char* services[];
 	public:
 		DBAPI();
@@ -61,7 +67,7 @@ class DBAPI {
 			uint16_t maxDistance = 500
 		);
 		DBdeparr* getStationBoard(
-			const char type[4],
+			const char  type[8],
 			const char* stationId,
 			const char* target        = NULL,
 			const char* Dtime         = NULL,
@@ -87,6 +93,7 @@ class DBAPI {
 		);
 		// Output Adafruit GFX compatible Umlauts for default font
 		void setAGFXOutput(bool gfx);
+		void setUmlaut(enum DBumlaut uml);
 };
 
 #endif //DBAPI_H

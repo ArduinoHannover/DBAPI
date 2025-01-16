@@ -156,13 +156,28 @@ DBdeparr* DBAPI::getStationBoard(
 		DBdeparr* da = new DBdeparr();
 		String targ = doc[abfahrt?"richtung":"abgangsOrt"];
 		
-		targ.replace("ß", agfx ? "\xE0" : "ss");
-		targ.replace("Ä", agfx ? "\x8E" : "Ae");
-		targ.replace("Ö", agfx ? "\x99" : "Oe");
-		targ.replace("Ü", agfx ? "\x9A" : "Ue");
-		targ.replace("ä", agfx ? "\x84" : "ae");
-		targ.replace("ö", agfx ? "\x94" : "oe");
-		targ.replace("ü", agfx ? "\x81" : "ue");
+		switch (repum) {
+			case REP_AGFX:
+				targ.replace("ß", "\xE0");
+				targ.replace("Ä", "\x8E");
+				targ.replace("Ö", "\x99");
+				targ.replace("Ü", "\x9A");
+				targ.replace("ä", "\x84");
+				targ.replace("ö", "\x94");
+				targ.replace("ü", "\x81");
+				break;
+			case REP_UML:
+				targ.replace("ß", "ss");
+				targ.replace("Ä", "Ae");
+				targ.replace("Ö", "Oe");
+				targ.replace("Ü", "Ue");
+				targ.replace("ä", "ae");
+				targ.replace("ö", "oe");
+				targ.replace("ü", "ue");
+				break;
+			default:
+				break;
+		}
 		targ.toCharArray(da->target, sizeof(DBdeparr::target));
 		strncpy(da->product, doc["kurztext"], sizeof(DBdeparr::product));
 		//strncpy(da->product, doc["produktGattung"], sizeof(DBdeparr::product));
@@ -253,7 +268,11 @@ DBdeparr* DBAPI::getArrivals(
 }
 
 void DBAPI::setAGFXOutput(bool gfx) {
-	agfx = gfx;
+	repum = gfx ? REP_AGFX : REP_UML;
+}
+
+void DBAPI::setUmlaut(enum DBumlaut uml) {
+	repum = uml;
 }
 
 const char* DBAPI::services[] = {
