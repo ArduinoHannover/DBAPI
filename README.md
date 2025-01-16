@@ -1,12 +1,17 @@
 # DBAPI
 Hacon/Hafas/Deutsche Bahn API für ESP8266
 
+[![PlatformIO Registry](https://badges.registry.platformio.org/packages/soundstorm/library/DBAPI.svg)](https://registry.platformio.org/libraries/soundstorm/DBAPI)
+
 ![tft_hannover_hbf](https://user-images.githubusercontent.com/193273/200298925-0f80dfdb-e17f-4f26-a28f-67b808540332.jpg)
 Abfartstafel aus dem DBTFT Beispiel
 
 Wenn die Bibliothek hilfreich ist, gerne den Sponsor-Button von GitHub nutzen (PayPal).
 
 ## Abfrage
+
+`setAGFXOutput(bool)` kann aufgerufen werden, um die automatische Ersetzung von Umlauten für Adafruit GFX vorzunehmen (true) oder Umlaute in ue, oe, ss, etc. umzuwandeln(false).
+Ansonsten wird keine Umwandlung vorgenommen.
 
 ### Stationen
 Für weitere Anfragen wird die Stations-ID benötigt.
