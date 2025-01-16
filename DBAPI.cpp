@@ -47,7 +47,7 @@ DBstation* DBAPI::getStation(
 	
 	char endOfHeaders[] = "\r\n\r\n";
 	if (!client.find(endOfHeaders)) {
-		DB_DEBUG_MSG"Did not find headers\n");
+		DB_DEBUG_MSG("Did not find headers\n");
 		return stations;
 	}
 	JsonDocument doc;

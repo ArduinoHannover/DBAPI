@@ -51,7 +51,7 @@ class DBAPI {
 		time_t parseTime(String t);
 		DBdeparr*  deparr   = NULL;
 		DBstation* stations = NULL;
-		enum DBUmlaut repum = REP_NONE;
+		enum DBumlaut repum = REP_NONE;
 		static const char* services[];
 	public:
 		DBAPI();
