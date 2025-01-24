@@ -39,6 +39,10 @@ time_t old_time;
 #define TFT_BL  5
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 
+time_t getNtpTime() {
+	return timeClient.getEpochTime();
+}
+
 void setup() {
 	Serial.begin(115200);
 	tft.begin();
@@ -62,6 +66,8 @@ void setup() {
 	yield();
 	timeClient.begin();
 	timeClient.setTimeOffset(3600); // CET
+	adjustTime(3600);
+	setSyncProvider(getNtpTime);
 
 	// Draw static content
 	tft.fillScreen(BACKGROUND_COLOR);
@@ -85,11 +91,12 @@ void setup() {
 }
 
 uint32_t scroll;
+time_t tdst;
 void loop() {
 	if (nextTime < millis()) {
 		timeClient.update();
 		time_t tnow = timeClient.getEpochTime();
-		time_t tdst = dst(tnow);
+		tdst = dst(tnow);
 		if (old_time / 60 != tdst / 60) {
 			tft.setTextColor(FOREGROUND_COLOR);
 			tft.setTextSize(2);
@@ -109,10 +116,11 @@ void loop() {
 			Serial.println("Disconnected");
 		}
 		Serial.println("Reload");
-		da = db.getDepartures(fromStation->stationId, NULL, NULL, NULL, 11, PROD_RE | PROD_S);
+		da = db.getDepartures(fromStation->stationId, NULL, tdst, 11, 3, PROD_RE | PROD_S);
 		Serial.println();
 		departure = da;
 		uint16_t pos = 21;
+		char buf[10];
 	    while (departure != NULL) {
 			pos += 18;
 			if (pos + 16 > tft.height()) break;
@@ -144,7 +152,7 @@ void loop() {
 			tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
 			printScroll(departure->target, 11 * 6 + 6, pos, true, departure->cancelled);
 #else // WIDE_MODE
-s			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
+			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
 			tft.setCursor(9 * 6 + 6, pos);
 			tft.setTextSize(1);
 			tft.print(departure->target);

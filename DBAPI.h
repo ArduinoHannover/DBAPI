@@ -70,25 +70,25 @@ class DBAPI {
 			const char  type[8],
 			const char* stationId,
 			const char* target        = NULL,
-			const char* Dtime         = NULL,
-			const char* Ddate         = NULL,
-			uint8_t     num           =    0,
+			time_t      time          =    0,
+			uint8_t     maxCount      =   20,
+			uint8_t     maxDuration   =    1,
 			uint16_t    productFilter = 1023
 		);
 		DBdeparr* getDepartures(
 			const char* stationId,
 			const char* target        = NULL,
-			const char* Dtime         = NULL,
-			const char* Ddate         = NULL,
-			uint8_t     num           =    0,
+			time_t      time          =    0,
+			uint8_t     num           =   20,
+			uint8_t     maxDuration   =    1,
 			uint16_t    productFilter = 1023
 		);
 		DBdeparr* getArrivals(
 			const char* stationId,
 			const char* target        = NULL,
-			const char* Dtime         = NULL,
-			const char* Ddate         = NULL,
-			uint8_t     num           =    0,
+			time_t      time          =    0,
+			uint8_t     num           =   20,
+			uint8_t     maxDuration   =    1,
 			uint16_t    productFilter = 1023
 		);
 		// Output Adafruit GFX compatible Umlauts for default font

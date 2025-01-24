@@ -27,13 +27,15 @@ Daher muss i.d.R. erst einmal diese abgefragt werden (kann dann statisch im Code
 
 ### Ankunft/Abfahrt
 
-Die Zeiten werden für einen Zeitraum von einer Stunde ab Wunschzeit (oder "jetzt") abgerufen.
+Die Zeiten werden standardmäßig für einen Zeitraum von einer Stunde ab Wunschzeit (oder "jetzt") abgerufen.
+Wird ein längerer Zeitraum ausgewählt, kann es zu Duplikaten kommen, da die Ergebnisse nicht gefiltert werden.
+Ein Zug der um 17:12 abfahren sollte und 70 Minuten verspätung hat wird sowohl in der Anfrage um 17 Uhr, als auch um 18 Uhr angezeigt, weil dieser immer noch erreichbar ist.
 
-`DBdeparr* getStationBoard(type, stationID, target, Dtime, Ddate, num, productFilter)`
+`DBdeparr* getStationBoard(type, stationID, target, time, maxCount, maxDuration, productFilter)`
 
-`DBdeparr* getDepatures(stationID, target, Dtime, Ddate, num, productFilter)`
+`DBdeparr* getDepatures(stationID, target, time, maxCount, maxDuration, productFilter)`
 
-`DBdeparr* getArrivals(stationID, target, Dtime, Ddate, num, productFilter)`
+`DBdeparr* getArrivals(stationID, target, time, maxCount, maxDuration, productFilter)`
 
 `getDepatures` und `getArrivals` verweisen nur auf `getStationBoard` mit dem entsprechenden `type`.
 
@@ -42,9 +44,9 @@ Die Zeiten werden für einen Zeitraum von einer Stunde ab Wunschzeit (oder "jetz
 | `type` | `char[8]` | | Kann entweder `abfahrt` oder `ankunft`  sein. |
 | `stationID` | `char*` | | ID aus der `DBstation` |
 | `target` | `const char*` | `NULL` | entfallen, da nicht mehr in der API vorhanden |
-| `Dtime` | `const char*` | `NULL` | Zeit in `HH:MM` oder `NULL` für "jetzt" |
-| `Ddate` | `const char*` | `NULL` | Datum in `yyyy-mm-dd` oder `NULL` für "heute" |
-| `num` | `uint8_t` | `10` | Anzahl der Ergebnisse, ohne Beschränkung mit offenem Filter reicht der RAM teils nicht an größeren Bahnhöfen |
+| `time` | `time_t` | `0` | Timestamp für die Abfrage oder `0` für "jetzt" |
+| `maxCount` | `uint8_t` | `20` | Anzahl der Ergebnisse, ohne Beschränkung mit offenem Filter reicht der RAM teils nicht an größeren Bahnhöfen |
+| `maxDuration` | `uint8_t` | `1` | Maximale Stunden, jede Stunde generiert eine zusätzliche Abfrage |
 | `productFilter` | `uint16_t` | `1023`/alle | Verkehrsmittel, die angezeigt werden sollen |
 
 #### Produktfilter
