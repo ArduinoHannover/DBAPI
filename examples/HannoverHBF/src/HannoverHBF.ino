@@ -32,13 +32,13 @@ void setup() {
 			Serial.println();
 			Serial.print("Date:     ");
 			char buf[11];
-			snprintf(buf, sizeof(buf), "%02d.%02d.%4d", day(depature->time), month(depature->time), year(depature->time) + 1970);
+			snprintf(buf, sizeof(buf), "%02d.%02d.%4d", day(da->time), month(da->time), year(da->time) + 1970);
 			Serial.println(buf);
 			Serial.print("Time:     ");
-			snprintf(buf, sizeof(buf), "%02d:%02d", hour(depature->time), minute(depature->time));
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(da->time), minute(da->time));
 			Serial.println(buf);
 			Serial.print("Realtime: ");
-			snprintf(buf, sizeof(buf), "%02d:%02d", hour(depature->realTime), minute(depature->realTime));
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(da->realTime), minute(da->realTime));
 			Serial.println(buf);
 			Serial.print("Product:  ");
 			Serial.println(da->product);
