@@ -26,7 +26,7 @@ void setup() {
 		Serial.println(station->latitude);
 		Serial.print("Longitude: ");
 		Serial.println(station->longitude);
-		DBdeparr* da = db.getDepartures(station->stationId, NULL, NULL, NULL, 0, PROD_ICE | PROD_IC_EC | PROD_IR | PROD_RE | PROD_S);
+		DBdeparr* da = db.getDepartures(station->stationId, NULL, 0, 20, 1, PROD_ICE | PROD_IC_EC | PROD_IR | PROD_RE | PROD_S);
 		while (da != NULL) {
 			yield();
 			Serial.println();
