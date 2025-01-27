@@ -32,7 +32,7 @@ void setup() {
 			Serial.println();
 			Serial.print("Date:     ");
 			char buf[11];
-			snprintf(buf, sizeof(buf), "%02d.%02d.%4d", day(da->time), month(da->time), year(da->time) + 1970);
+			snprintf(buf, sizeof(buf), "%02d.%02d.%4d", day(da->time), month(da->time), year(da->time));
 			Serial.println(buf);
 			Serial.print("Time:     ");
 			snprintf(buf, sizeof(buf), "%02d:%02d", hour(da->time), minute(da->time));
