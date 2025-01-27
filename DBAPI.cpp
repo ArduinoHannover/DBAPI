@@ -61,7 +61,30 @@ DBstation* DBAPI::getStation(
 	for (uint8_t i = 0; i < doc.size(); i++) {
 		DBstation* station = new DBstation();
 		JsonObject st = doc[i];
-		strncpy(station->name, st["name"], sizeof(station->name));
+		String stationname = st["name"];
+		switch (repum) {
+			case REP_AGFX:
+				stationname.replace("ß", "\xE0");
+				stationname.replace("Ä", "\x8E");
+				stationname.replace("Ö", "\x99");
+				stationname.replace("Ü", "\x9A");
+				stationname.replace("ä", "\x84");
+				stationname.replace("ö", "\x94");
+				stationname.replace("ü", "\x81");
+				break;
+			case REP_UML:
+				stationname.replace("ß", "ss");
+				stationname.replace("Ä", "Ae");
+				stationname.replace("Ö", "Oe");
+				stationname.replace("Ü", "Ue");
+				stationname.replace("ä", "ae");
+				stationname.replace("ö", "oe");
+				stationname.replace("ü", "ue");
+				break;
+			default:
+				break;
+		}
+		strncpy(station->name, stationname.c_str(), sizeof(station->name));
 		strncpy(station->stationId, st["locationId"], sizeof(station->stationId));
 		station->longitude = st["coordinates"]["longitude"];
 		station->latitude = st["coordinates"]["latitude"];
