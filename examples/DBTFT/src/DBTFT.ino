@@ -182,6 +182,11 @@ void loop() {
 			}
 			departure = departure->next;
 		}
+		// clear empty spots (not enough departures)
+	    while (pos + 16 + 18 <= tft.height()) {
+			pos += 18;
+			tft.fillRect(0, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
+		}
 		nextCheck = millis() + 50000;
 	}
 #ifdef WIDE_MODE
