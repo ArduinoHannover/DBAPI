@@ -28,8 +28,9 @@ Daher muss i.d.R. erst einmal diese abgefragt werden (kann dann statisch im Code
 ### Ankunft/Abfahrt
 
 Die Zeiten werden standardmäßig für einen Zeitraum von einer Stunde ab Wunschzeit (oder "jetzt") abgerufen.
-Wird ein längerer Zeitraum ausgewählt, kann es zu Duplikaten kommen, da die Ergebnisse nicht gefiltert werden.
-Ein Zug der um 17:12 abfahren sollte und 70 Minuten verspätung hat wird sowohl in der Anfrage um 17 Uhr, als auch um 18 Uhr angezeigt, weil dieser immer noch erreichbar ist.
+Wird ein längerer Zeitraum ausgewählt, kann es in der Auflistung zu Duplikaten kommen.
+Ein Zug der um 17:12 abfahren sollte und 70 Minuten Verspätung hat wird sowohl in der Anfrage um 17 Uhr, als auch um 18 Uhr ausgegeben, weil dieser mit der Abfragezeit von 18 Uhr und effektiver Abfahrt um 18:22 immer noch erreichbar ist.
+Um diese Duplikate zu filtern, wird der Zuglauf (eindeutige Kennung der Fahrt) gegen bisher erfasste Fahrten geprüft und die Fahrt verworfen, wenn es eine Übereinstimmung gibt. 
 
 `DBdeparr* getStationBoard(type, stationID, target, time, maxCount, maxDuration, productFilter)`
 

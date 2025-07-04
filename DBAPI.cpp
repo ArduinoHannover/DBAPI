@@ -126,6 +126,7 @@ DBdeparr* DBAPI::getStationBoard(
 	bool abfahrt = strcmp(type, "abfahrt") == 0;
 	DBdeparr* prev = NULL;
 	uint8_t cnt = 0;
+	uint8_t hashes[maxCount][20];
 
 	// Set static request parameters
 	JsonDocument reqDoc;
@@ -195,6 +196,25 @@ DBdeparr* DBAPI::getStationBoard(
 				DB_DEBUG_MSG(error.c_str());
 				return deparr;
 			}
+
+			uint8_t hash[20];
+			// hash to save RAM as the ID is >150 chars
+			sha1(doc["zuglaufId"], hash);
+
+			bool match = false;
+			for (uint8_t i = 0; i < cnt && !match; i++) {
+				bool mismatch = false;
+				for (uint8_t j = 0; j < 20; j++) {
+					if (hashes[i][j] != hash[j]) {
+						mismatch = true;
+						break;
+					}
+					match |= !mismatch;
+				}
+			}
+			// duplicate entry found, skipping
+			if (match) continue;
+
 			DBdeparr* da = new DBdeparr();
 			String targ = doc[abfahrt?"richtung":"abgangsOrt"];
 			
