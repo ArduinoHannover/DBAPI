@@ -132,7 +132,6 @@ void loop() {
 			tft.setTextColor(BACKGROUND_COLOR);
 			tft.setTextSize(1);
 			tft.setCursor(2, pos);
-			char buf[6];
 			snprintf(buf, sizeof(buf), "%02d:%02d", hour(departure->time), minute(departure->time));
 			tft.print(buf);
 #ifdef WIDE_MODE
