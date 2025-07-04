@@ -142,7 +142,7 @@ void loop() {
 #endif // WIDE_MODE
 			tft.setCursor(2, pos + 8);
 			tft.print(departure->product);
-			if (strcmp("", departure->textline) != 0) {
+			if (strcmp("", departure->textline)) {
 				tft.write(' ');
 				tft.print(departure->textline);
 			}
@@ -172,7 +172,7 @@ void loop() {
 			tft.setTextColor(FOREGROUND_COLOR);
 			tft.setTextSize(2);
 			tft.setCursor(tft.width() - 7 * 6 * 2, pos);
-			if (strcmp("", departure->newPlatform) != 0 && strcmp(departure->platform, departure->newPlatform) != 0) {
+			if (strcmp("", departure->newPlatform) && strcmp(departure->platform, departure->newPlatform)) {
 				tft.setTextColor(HIGHLIGHT_COLOR);
 				tft.print("->");
 				tft.print(departure->newPlatform);
