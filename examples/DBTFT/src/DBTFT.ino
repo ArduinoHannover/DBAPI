@@ -172,7 +172,7 @@ void loop() {
 			tft.setTextColor(FOREGROUND_COLOR);
 			tft.setTextSize(2);
 			tft.setCursor(tft.width() - 7 * 6 * 2, pos);
-			if (strcmp("", departure->newPlatform) != 0) {
+			if (strcmp("", departure->newPlatform) != 0 && strcmp(departure->platform, departure->newPlatform) != 0) {
 				tft.setTextColor(HIGHLIGHT_COLOR);
 				tft.print("->");
 				tft.print(departure->newPlatform);
