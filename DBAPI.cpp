@@ -1,6 +1,7 @@
 #include "DBAPI.h"
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <Hash.h>
 
 #ifdef DEBUG_ESP_PORT
 #define DB_DEBUG_MSG(...) DEBUG_ESP_PORT.printf( __VA_ARGS__ )
