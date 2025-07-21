@@ -18,13 +18,21 @@
     "license": "GPL-3.0-only",
     "frameworks": "Arduino",
     "platforms": ["espressif8266", "espressif32"],
-    "dependencies": {
-      "paulstoffregen/Time": "^1.6.1",
-      "bblanchon/ArduinoJson": "^7.3.0",
+    "dependencies": [
+      {
+        "owner": "paulstoffregen",
+        "name": "Time",
+        "version": "^1.6.1"
+      },
+      {
+        "owner": "bblanchon",
+        "name": "ArduinoJson",
+        "version": "^7.3.0"
+      },
       {
         "name": "hash",
         "version": "https://github.com/bbx10/Hash_tng/archive/refs/heads/master.zip",
         "platforms": ["espressif32"]
       }
-    }
+    ]
   }
