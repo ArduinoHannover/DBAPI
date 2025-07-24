@@ -1,14 +1,20 @@
 #include <Arduino.h>
 #include <DBAPI.h>
-#include <Adafruit_ILI9341.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 #include <TimeLib.h>
 
 //#define BOARD_2432S028R //ESP32 + ILI9341 2.8" TFT
+//#define USE_ST7798      //2432S028R with ST7798
 #define AUTOCONFIG
 #define ENABLEOTA
 //#define DEBUG_BRIGHTNESS
+
+#ifdef USE_ST7798
+#include <Adafruit_ST7789.h>
+#else
+#include <Adafruit_ILI9341.h>
+#endif
 
 #ifdef AUTOCONFIG
 	const char* apSSID = "DBTafel";
@@ -51,15 +57,13 @@ uint32_t nextScroll;
 uint32_t nextBrightness;
 time_t old_time;
 bool updateInhibit = false;
-#ifdef ESP32
-	#define MAX_ANALOG 4095
-#else
-	#define MAX_ANALOG 1023
-#endif
 uint16_t currentBrightness = 0;
 uint8_t  rotation = 1;
 
 #ifdef BOARD_2432S028R
+	#define HSPI_SCLK 14
+	#define HSPI_MISO 12
+	#define HSPI_MOSI 13
 	#define TFT_DC  2
 	#define TFT_CS 15
 	#define TFT_BL 21
@@ -68,6 +72,9 @@ uint8_t  rotation = 1;
 	// 1V dark
 	// 0V bright
 #else
+	#define HSPI_SCLK 14
+	#define HSPI_MISO 12
+	#define HSPI_MOSI 13
 	#define TFT_DC 16
 	#define TFT_CS 15
 	#define TFT_BL  5
@@ -76,7 +83,20 @@ uint8_t  rotation = 1;
 #define BUT_IN 0
 #define MIN_BRIGHTNESS   2
 #define MAX_BRIGHTNESS 255 // Nothing above noteworthy
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
+#ifdef ESP32
+	SPIClass* hspi = new SPIClass(HSPI);
+#ifdef USE_ST7798
+	Adafruit_ST7789 tft = Adafruit_ST7789(hspi, TFT_CS, TFT_DC, -1);
+#else
+	Adafruit_ILI9341 tft = Adafruit_ILI9341(hspi, TFT_DC, TFT_CS);
+#endif
+#else
+#ifdef USE_ST7798
+	Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, -1);
+#else
+	Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
+#endif
+#endif
 
 #ifdef AUTOCONFIG
 #endif
@@ -278,14 +298,36 @@ void afterConfigCallback() {
 
 void setup() {
 	Serial.begin(115200);
+#ifdef ESP32
+	//hspi->begin();
+	hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, TFT_CS);
+#endif
+
+#ifdef USE_ST7798
+	tft.init(240, 320, SPI_MODE0);
+	tft.invertDisplay(0);
+#else
 	tft.begin();
+#endif
+#ifdef BOARD_2432S028R
+	pinMode(4, OUTPUT); //LED RED
+	digitalWrite(4, 1);
+	pinMode(16, OUTPUT); //LED GREEN
+	digitalWrite(16, 1);
+	pinMode(17, OUTPUT); //LED BLUE
+	digitalWrite(17, 1);
+#endif
 	WiFi.mode(WIFI_STA);
 	pinMode(BUT_IN, INPUT_PULLUP);
 #ifndef AUTOCONFIG
 	WiFi.mode(WIFI_STA);
 	WiFi.begin(ssid, password);
 #else
+#ifdef ESP32
+	if (!LittleFS.begin(1)) {
+#else
 	if (!LittleFS.begin()) {
+#endif
 		Serial.println("LittleFS mount failed");
 	} else {
 		readParams();
@@ -489,12 +531,15 @@ void loop() {
 #ifdef LDR_IN
 	if (nextBrightness < millis()) {
 		uint16_t b = analogRead(LDR_IN);
+#ifdef ESP32
+		b >>= 2;
+#endif
 		if (b < currentBrightness) {
 			currentBrightness--;
 		} else if (b > currentBrightness) {
 			currentBrightness++;
 		}
-		uint16_t brightness = map(currentBrightness, MAX_ANALOG, 0, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
+		uint16_t brightness = map(currentBrightness, 1023, 0, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
 		analogWrite(TFT_BL, brightness);
 #ifdef DEBUG_BRIGHTNESS
 		Serial.print("B:\t");
