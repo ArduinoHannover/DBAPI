@@ -145,7 +145,7 @@ WiFiManagerParameter rotationParameter("rotation", "Rotation (1 oder 3)", String
 WiFiManagerParameter filterICEParameter("filterICE", "Hochgeschwindigkeitsz&uuml;ge (1 zum Aktivieren)", String((filter & PROD_ICE) > 0).c_str(), 1);
 WiFiManagerParameter filterICECParameter("filterICEC", "Intercity- und Eurocityz&uuml;ge 1 zum Aktivieren)", String((filter & PROD_IC_EC) > 0).c_str(), 1);
 WiFiManagerParameter filterIRParameter("filterIR", "Interregio- und Schnellz&uuml;ge (1 zum Aktivieren)", String((filter & PROD_IR) > 0).c_str(), 1);
-WiFiManagerParameter filterREParameter("filterRE", "Nahverkehr, sonsitge Z&uuml;ge (1 zum Aktivieren)", String((filter & PROD_RE) > 0).c_str(), 1);
+WiFiManagerParameter filterREParameter("filterRE", "Nahverkehr, sonstige Z&uuml;ge (1 zum Aktivieren)", String((filter & PROD_RE) > 0).c_str(), 1);
 WiFiManagerParameter filterSParameter("filterS", "S-Bahnen (1 zum Aktivieren)", String((filter & PROD_S) > 0).c_str(), 1);
 WiFiManagerParameter filterBUSParameter("filterBUS", "Busse (1 zum Aktivieren)", String((filter & PROD_BUS) > 0).c_str(), 1);
 WiFiManagerParameter filterSHIPParameter("filterSHIP", "Schiffe (1 zum Aktivieren)", String((filter & PROD_SHIP) > 0).c_str(), 1);
