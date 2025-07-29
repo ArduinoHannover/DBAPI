@@ -273,11 +273,11 @@ DBdeparr* DBAPI::getStationBoard(
 					//Serial.println(arr[i]["text"].as<String>());
 				}
 			}
-			da->time = this->parseTime(String(doc[abfahrt ? "abgangsDatum" : "ankunftsDatum"]));
+			da->time = this->parseTime(doc[abfahrt ? "abgangsDatum" : "ankunftsDatum"]);
 			if (doc[abfahrt ? "ezAbgangsDatum" : "ezAnkunftsDatum"].isNull()) {
 				da->realTime = da->time;
 			} else {
-				da->realTime = this->parseTime(String(doc[abfahrt ? "ezAbgangsDatum" : "ezAnkunftsDatum"]));
+				da->realTime = this->parseTime(doc[abfahrt ? "ezAbgangsDatum" : "ezAnkunftsDatum"]);
 			}
 			da->delay = da->realTime - da->time;
 			da->delay /= 60;
@@ -303,15 +303,15 @@ DBdeparr* DBAPI::getStationBoard(
 	return deparr;
 }
 
-time_t DBAPI::parseTime(String t) {
+time_t DBAPI::parseTime(const char* t) {
 	tmElements_t time;
 	// 0123-56-89T12:45:67+90:23
 	// Year in timeElements is years since 1970
-	time.Year = atoi(t.substring(0,4).c_str()) - 1970;
-	time.Month = atoi(t.substring(5,7).c_str());
-	time.Day = atoi(t.substring(8,10).c_str());
-	time.Hour = atoi(t.substring(11,13).c_str());
-	time.Minute = atoi(t.substring(14,16).c_str());
+	time.Year = atoi(&t[0]) - 1970;
+	time.Month = atoi(&t[5]);
+	time.Day = atoi(&t[8]);
+	time.Hour = atoi(&t[11]);
+	time.Minute = atoi(&t[14]);
 	time.Second = 0;
 	return makeTime(time);
 }
