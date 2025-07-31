@@ -1,0 +1,42 @@
+name: PlatformIO CI
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build PlatformIO Project
+        run: pio ci -c ./examples/DBTFT/platformio.ini --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
+
+      - name: Upload esp8266
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp8266.bin
+          path: /tmp/pio-build/.pio/build/d1_mini/firmware.bin
+
+      - name: Upload CYD-ILI9341
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYD-9341.bin
+          path: /tmp/pio-build/.pio/build/2432s028r/firmware.bin
+
+      - name: Upload CYD-ST7798
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYD-7798.bin
+          path: /tmp/pio-build/.pio/build/2432s028r_dualusb/firmware.bin
