@@ -98,6 +98,12 @@ uint8_t  rotation = 1;
 #endif
 #endif
 
+#ifndef LDR_IN
+#define LDR_IN -1
+#endif
+
+int8_t ldr_pin = LDR_IN;
+
 #ifdef AUTOCONFIG
 #endif
 
@@ -142,6 +148,11 @@ void updateStarted() {
 WiFiManager wifiManager;
 WiFiManagerParameter stationNameParameter("stationName", "Stationsname", fromStationName, sizeof(fromStationName));
 WiFiManagerParameter rotationParameter("rotation", "Rotation (1 oder 3)", String(rotation).c_str(), 1);
+#ifdef ESP8266
+WiFiManagerParameter ldrParameter("ldrpin", "Lichtsensor (-1 zum Deaktivieren, 17 sonst)", String(ldr_pin).c_str(), 2);
+#else
+WiFiManagerParameter ldrParameter("ldrpin", "Lichtsensor (-1 zum Deaktivieren, CYD z.B. 34 zum Aktivieren)", String(ldr_pin).c_str(), 2);
+#endif
 WiFiManagerParameter filterICEParameter("filterICE", "Hochgeschwindigkeitsz&uuml;ge (1 zum Aktivieren)", String((filter & PROD_ICE) > 0).c_str(), 1);
 WiFiManagerParameter filterICECParameter("filterICEC", "Intercity- und Eurocityz&uuml;ge 1 zum Aktivieren)", String((filter & PROD_IC_EC) > 0).c_str(), 1);
 WiFiManagerParameter filterIRParameter("filterIR", "Interregio- und Schnellz&uuml;ge (1 zum Aktivieren)", String((filter & PROD_IR) > 0).c_str(), 1);
@@ -215,6 +226,16 @@ void readParams() {
 	} else {
 		Serial.println("File not found");
 	}
+	if (LittleFS.exists("/ldr")) {
+		File f = LittleFS.open("/ldr", "r");
+		if (f) {
+			ldr_pin = f.readString().toInt();
+		} else {
+			Serial.println("File not open");
+		}
+	} else {
+		Serial.println("File not found");
+	}
 	if (LittleFS.exists("/filter")) {
 		File f = LittleFS.open("/filter", "r");
 		if (f) {
@@ -268,6 +289,12 @@ void afterConfigCallback() {
 			tft.setRotation(rotation);
 			Serial.print("Rotation gesetzt: ");
 			Serial.println(rotation);
+		}
+		ldr_pin = atoi(ldrParameter.getValue());
+		{
+			File f = LittleFS.open("/ldr", "w");
+			f.print(ldrParameter.getValue());
+			f.close();
 		}
 		uint16_t val =
 			(filterICEParameter.getValue()[0]  == '1') * PROD_ICE |
@@ -338,6 +365,8 @@ void setup() {
 	wifiManager.addParameter(&stationNameParameter);
 	rotationParameter.setValue(String(rotation).c_str(), 1);
 	wifiManager.addParameter(&rotationParameter);
+	ldrParameter.setValue(String(ldr_pin).c_str(), 2);
+	wifiManager.addParameter(&ldrParameter);
 	filterICEParameter.setValue(String((filter & PROD_ICE) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterICEParameter);
 	filterICECParameter.setValue(String((filter & PROD_IC_EC) > 0).c_str(), 1);
@@ -529,30 +558,30 @@ void loop() {
 #ifdef AUTOCONFIG
 	checkConfigRequest();
 #endif
-#ifdef LDR_IN
-	if (nextBrightness < millis()) {
-		uint16_t b = analogRead(LDR_IN);
+	if (ldr_pin > 0) { //0 is never an analog in
+		if (nextBrightness < millis()) {
+			uint16_t b = analogRead(ldr_pin);
 #ifdef ESP32
-		b >>= 2;
+			b >>= 2;
 #endif
-		if (b < currentBrightness) {
-			currentBrightness--;
-		} else if (b > currentBrightness) {
-			currentBrightness++;
-		}
-		uint16_t brightness = map(currentBrightness, 1023, 0, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
-		analogWrite(TFT_BL, brightness);
+			if (b < currentBrightness) {
+				currentBrightness--;
+			} else if (b > currentBrightness) {
+				currentBrightness++;
+			}
+			uint16_t brightness = map(currentBrightness, 1023, 0, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
+			analogWrite(TFT_BL, brightness);
 #ifdef DEBUG_BRIGHTNESS
-		Serial.print("B:\t");
-		Serial.print(b);
-		Serial.print("\tCB:\t");
-		Serial.print(currentBrightness);
-		Serial.print("\tL:\t");
-		Serial.println(brightness);
+			Serial.print("B:\t");
+			Serial.print(b);
+			Serial.print("\tCB:\t");
+			Serial.print(currentBrightness);
+			Serial.print("\tL:\t");
+			Serial.println(brightness);
 #endif
-		nextBrightness = millis() + 10;
+			nextBrightness = millis() + 10;
+		}
 	}
-#endif
 }
 
 void printScroll(String text, uint16_t x, uint16_t y, bool force, bool cancelled) {
