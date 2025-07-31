@@ -257,6 +257,7 @@ void afterConfigCallback() {
 			File f = LittleFS.open("/station", "w");
 			f.print(fromStationName);
 			f.close();
+			fromStation = db.getStation(fromStationName);
 		}
 		uint8_t r = rotationParameter.getValue()[0];
 		if (r == '1' || r == '3') {
