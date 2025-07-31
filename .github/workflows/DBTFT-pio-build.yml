@@ -18,16 +18,12 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install PlatformIO Core
-        run: pip install --upgrade platformio
+        run:  |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
 
       - name: Build PlatformIO Project D1
         run: pio ci -c ./examples/DBTFT/platformio.ini -e d1_mini --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
-
-      - name: Build PlatformIO Project CYD 9341
-        run: pio ci -c ./examples/DBTFT/platformio.ini -e 2432s028r --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
-
-      - name: Build PlatformIO Project CYD 7798
-        run: pio ci -c ./examples/DBTFT/platformio.ini -e 2432s028r_dualusb --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
 
       - name: Upload esp8266
         uses: actions/upload-artifact@v4
@@ -35,11 +31,17 @@ jobs:
           name: esp8266.bin
           path: /tmp/pio-build/.pio/build/d1_mini/firmware.bin
 
+      - name: Build PlatformIO Project CYD 9341
+        run: pio ci -c ./examples/DBTFT/platformio.ini -e 2432s028r --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
+
       - name: Upload CYD-ILI9341
         uses: actions/upload-artifact@v4
         with:
           name: CYD-9341.bin
           path: /tmp/pio-build/.pio/build/2432s028r/firmware.bin
+
+      - name: Build PlatformIO Project CYD 7798
+        run: pio ci -c ./examples/DBTFT/platformio.ini -e 2432s028r_dualusb --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
 
       - name: Upload CYD-ST7798
         uses: actions/upload-artifact@v4
