@@ -35,9 +35,12 @@ uint16_t filter = PROD_RE | PROD_S;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
 
-#define BACKGROUND_COLOR 0x001F // Blue
-#define FOREGROUND_COLOR 0xFFFF // White
-#define HIGHLIGHT_COLOR  0xFFE0 // Yellow
+#define COLOR_RED    0xF800
+#define COLOR_WHITE  0xFFFF
+#define COLOR_BLACK  0x0000
+#define COLOR_BLUE   0x001F
+#define COLOR_YELLOW 0xFFE0
+#define COLOR_ORANGE 0xFDA0
 
 // Optional view with large destinations, does interfere with platform when station names are longer
 #define WIDE_MODE
@@ -51,6 +54,7 @@ DBAPI db;
 DBstation* fromStation;
 DBdeparr* da = NULL;
 DBdeparr* departure = NULL;
+time_t tdst;
 uint32_t nextCheck;
 uint32_t nextTime;
 uint32_t nextScroll;
@@ -59,6 +63,11 @@ time_t old_time;
 bool updateInhibit = false;
 uint16_t currentBrightness = 0;
 uint8_t  rotation = 1;
+uint8_t  failedConnection = 0;
+uint16_t backgroundColor = COLOR_BLUE;
+uint16_t highlightColor  = COLOR_YELLOW;
+uint16_t foregroundColor = COLOR_WHITE;
+char     errorMessage[50];
 
 #ifdef BOARD_2432S028R
 	#define HSPI_SCLK 14
@@ -112,14 +121,14 @@ time_t getNtpTime() {
 }
 
 void drawStaticContent() {
-	tft.fillScreen(BACKGROUND_COLOR);
-	tft.setTextColor(FOREGROUND_COLOR);
+	tft.fillScreen(backgroundColor);
+	tft.setTextColor(foregroundColor);
 	tft.setTextSize(2);
 	//tft.setCursor((tft.width() - (strlen(fromStationName) * 6 - 1) * 2) / 2, 2);
 	tft.setCursor(11 * 6 + 6, 2);
 	tft.print(fromStationName);
-	tft.fillRect(0, 18, tft.width(), 18, HIGHLIGHT_COLOR);
-	tft.setTextColor(BACKGROUND_COLOR);
+	tft.fillRect(0, 18, tft.width(), 18, highlightColor);
+	tft.setTextColor(backgroundColor);
 	tft.setCursor(2, 20);
 	tft.print("Zeit");
 #ifdef WIDE_MODE
@@ -132,13 +141,135 @@ void drawStaticContent() {
 	tft.print("Gleis");
 }
 
+void drawTime() {
+	tft.setTextColor(foregroundColor);
+	tft.setTextSize(2);
+	tft.setCursor(2, 2);
+	tft.fillRect(2, 2, 5 * 6 * 2 , 16, backgroundColor);
+	if (hour(tdst) < 10) tft.write('0');
+	tft.print(hour(tdst));
+	tft.write(':');
+	if (minute(tdst) < 10) tft.write('0');
+	tft.print(minute(tdst));
+	old_time = tdst;
+}
+
+bool drawDeparture(DBdeparr* departure, uint16_t &pos) {
+	Serial.println("Drawing next departure.");
+	char buf[10];
+	pos += 18;
+	if (pos + 16 > tft.height()) return false;
+#ifdef WIDE_MODE
+	tft.fillRect(0, pos - 1, 11 * 6 + 4 , 17, foregroundColor);
+#else // WIDE_MODE
+	tft.fillRect(0, pos - 1, 9 * 6 + 4 , 17, foregroundColor);
+#endif // WIDE_MODE
+	tft.setTextColor(backgroundColor);
+	tft.setTextSize(1);
+	tft.setCursor(2, pos);
+	snprintf(buf, sizeof(buf), "%02d:%02d", hour(departure->time), minute(departure->time));
+	tft.print(buf);
+#ifdef WIDE_MODE
+	if (!departure->cancelled && departure->delay) {
+		tft.print(" +");
+		tft.print(departure->delay);
+	}
+#endif // WIDE_MODE
+	tft.setCursor(2, pos + 8);
+	tft.print(departure->product);
+	if (strcmp("", departure->textline)) {
+		tft.write(' ');
+		tft.print(departure->textline);
+	}
+	tft.setTextColor(foregroundColor);
+#ifdef WIDE_MODE
+	tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, backgroundColor);
+	printScroll(departure->target, 11 * 6 + 6, pos, true, departure->cancelled);
+#else // WIDE_MODE
+	tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, backgroundColor);
+	tft.setCursor(9 * 6 + 6, pos);
+	tft.setTextSize(1);
+	tft.print(departure->target);
+#endif // WIDE_MODE
+
+#ifndef WIDE_MODE
+	tft.setTextColor(highlightColor);
+	tft.setCursor(9 * 6 + 6, pos + 8);
+	if (departure->cancelled) {
+		tft.print("Fahrt f\x84llt aus");
+		tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(departure->target) * 6 - 1, foregroundColor);
+	} else if (departure->delay) {
+		tft.print("ca. ");
+		tft.print(departure->delay);
+		tft.print(" Minuten sp\x84ter");
+	}
+#endif
+	tft.setTextColor(foregroundColor);
+	tft.setTextSize(2);
+	tft.setCursor(tft.width() - 7 * 6 * 2, pos);
+	if (strcmp("", departure->newPlatform) && strcmp(departure->platform, departure->newPlatform)) {
+		tft.setTextColor(highlightColor);
+		//tft.print("->");
+		tft.print(departure->newPlatform);
+	} else {
+		tft.print(departure->platform);
+	}
+	return true;
+}
+
+void printScroll(String text, uint16_t x, uint16_t y, bool force, bool cancelled) {
+#ifdef TEXT_FILL
+	tft.setTextColor(foregroundColor, backgroundColor);
+#else // TEXT_FILL
+	tft.setTextColor(foregroundColor);
+#endif // TEXT_FILL
+	tft.setTextSize(2);
+	if (text.length() > SCROLL_CHARS || force) {
+#ifdef SCROLLING_ENABLED
+		uint32_t p = scroll;
+		int16_t ts = text.length() - SCROLL_CHARS;
+		if (ts < 0) {
+			ts = 0;
+		}
+		uint32_t to_scroll = ts;
+		p %= to_scroll * 2 + SCROLL_STALL * 2;
+		if (p <= to_scroll) {
+			if (!force && p == 0) return; // do not update 0 position
+		} else if (p <= to_scroll + SCROLL_STALL) {
+			p = to_scroll;
+			if (!force) return; // do not update on stall, if no update is forced
+		} else if (p <= to_scroll * 2 + SCROLL_STALL) {
+			p = SCROLL_STALL + to_scroll * 2 - p;
+		} else {
+			p = 0;
+			if (!force) return; // do not update on stall, if no update is forced
+		}
+#else // SCOLLING_ENABLED
+		if (!force) return;
+		uint32_t p = 0;
+#endif // SCROLLING_ENABLED
+#ifndef TEXT_FILL
+		tft.fillRect(x - 2, y - 1, SCROLL_CHARS * 6 * 2, 17, backgroundColor);
+#endif // TEXT_FILL
+		tft.setCursor(x, y);
+		text = text.substring(p, p + SCROLL_CHARS);
+		tft.print(text);
+		if (cancelled) {
+			uint8_t len = min((uint8_t) text.length(), (uint8_t) SCROLL_CHARS);
+			tft.drawFastHLine(x, y + 6, (len * 6 - 1) * 2, foregroundColor);
+			tft.drawFastHLine(x, y + 7, (len * 6 - 1) * 2, foregroundColor);
+		}
+	}
+}
+
 #ifdef ENABLEOTA
 void updateStarted() {
 	updateInhibit = true;
 	Serial.println("Update started...");
-	tft.fillScreen(BACKGROUND_COLOR);
-	tft.setTextColor(FOREGROUND_COLOR);
+	tft.fillScreen(COLOR_BLACK);
+	tft.setTextColor(COLOR_WHITE);
 	tft.setCursor(0, 0);
+	tft.setFont();
 	tft.setTextSize(2);
 	tft.println("Update...");
 }
@@ -166,10 +297,18 @@ WiFiManagerParameter filterASTParameter("filterAST", "Anrufpflichtige Verkehre (
 bool shouldSaveConfig = false;
 
 void configModeCallback (WiFiManager *myWiFiManager) {
-	tft.fillScreen(BACKGROUND_COLOR);
-	tft.setTextColor(FOREGROUND_COLOR);
+	if (strlen(errorMessage)) {
+		tft.fillScreen(COLOR_RED);
+	} else {
+		tft.fillScreen(COLOR_BLACK);
+	}
+	tft.setTextColor(COLOR_WHITE);
+	tft.setFont();
 	tft.setTextSize(2);
 	tft.setCursor(0, 0);
+	if (strlen(errorMessage)) {
+		tft.println(errorMessage);
+	}
 	tft.println("Zur Konfiguration mit\nAccess-Point verbinden:");
 	tft.println(apSSID);
 	tft.println(apPassword);
@@ -180,8 +319,8 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 }
 
 void failedConfig() {
-	tft.fillScreen(0xF800); // red
-	tft.setTextColor(FOREGROUND_COLOR);
+	tft.fillScreen(COLOR_RED);
+	tft.setTextColor(COLOR_WHITE);
 	tft.setTextSize(2);
 	tft.setCursor(0, 0);
 	tft.println("WLAN Verbindung fehl\n-geschlagen");
@@ -198,6 +337,7 @@ void saveConfigCallback () {
 }
 
 void readParams() {
+	Serial.println("Reading saved Paramters.");
 	if (LittleFS.exists("/station")) {
 		File f = LittleFS.open("/station", "r");
 		if (f) {
@@ -208,10 +348,10 @@ void readParams() {
 			if (i < sizeof(fromStationName))
 			fromStationName[i] = 0;
 		} else {
-			Serial.println("File not open");
+			Serial.println("File /station not open");
 		}
 	} else {
-		Serial.println("File not found");
+		Serial.println("File /station not found");
 	}
 	if (LittleFS.exists("/rotation")) {
 		File f = LittleFS.open("/rotation", "r");
@@ -221,20 +361,20 @@ void readParams() {
 				rotation = r;
 			}
 		} else {
-			Serial.println("File not open");
+			Serial.println("File /rotation not open");
 		}
 	} else {
-		Serial.println("File not found");
+		Serial.println("File /rotation not found");
 	}
 	if (LittleFS.exists("/ldr")) {
 		File f = LittleFS.open("/ldr", "r");
 		if (f) {
 			ldr_pin = f.readString().toInt();
 		} else {
-			Serial.println("File not open");
+			Serial.println("File /ldr not open");
 		}
 	} else {
-		Serial.println("File not found");
+		Serial.println("File /ldr not found");
 	}
 	if (LittleFS.exists("/filter")) {
 		File f = LittleFS.open("/filter", "r");
@@ -250,22 +390,27 @@ void readParams() {
 				Serial.println(val);
 			}
 		} else {
-			Serial.println("File not open");
+			Serial.println("File /filter not open");
 		}
 	} else {
-		Serial.println("File not found");
+		Serial.println("File /filter not found");
 	}
+	Serial.println("Done loading settings.");
+}
+
+bool doReconfig() {
+	bool state = wifiManager.startConfigPortal(apSSID, apPassword);
+	afterConfigCallback();
+	drawStaticContent();
+	updateInhibit = false;
+	nextCheck = 0;
+	errorMessage[0] = 0; // delete error message, set next time if neccessary
+	return state;
 }
 
 void checkConfigRequest() {
 	if (!digitalRead(BUT_IN)) {
-		if (!wifiManager.startConfigPortal(apSSID, apPassword)) {
-			// exited
-		}
-		afterConfigCallback();
-		drawStaticContent();
-		updateInhibit = false;
-		nextCheck = 0;
+		doReconfig();
 	}
 }
 
@@ -393,8 +538,8 @@ void setup() {
 #endif
 	pinMode(TFT_BL, OUTPUT);
 	digitalWrite(TFT_BL, HIGH);
-	tft.fillScreen(BACKGROUND_COLOR);
-	tft.setTextColor(FOREGROUND_COLOR);
+	tft.fillScreen(COLOR_BLACK);
+	tft.setTextColor(COLOR_WHITE);
 	tft.setRotation(rotation);
 	tft.setTextSize(2);
 	tft.print("Verbinde...");
@@ -432,7 +577,10 @@ void setup() {
 #endif
 	db.setAGFXOutput(true);
 	Serial.println();
-	fromStation = db.getStation(fromStationName);
+	// Retry if no data available
+	for (uint8_t i = 0; i < 3 && fromStation == NULL; i++) {
+		fromStation = db.getStation(fromStationName);
+	}
 	yield();
 	timeClient.begin();
 	timeClient.setTimeOffset(3600); // CET
@@ -442,100 +590,63 @@ void setup() {
 }
 
 uint32_t scroll;
-time_t tdst;
 void loop() {
 	if (nextTime < millis() && !updateInhibit) {
 		timeClient.update();
 		time_t tnow = timeClient.getEpochTime();
 		tdst = dst(tnow);
 		if (old_time / 60 != tdst / 60) {
-			tft.setTextColor(FOREGROUND_COLOR);
-			tft.setTextSize(2);
-			tft.setCursor(2, 2);
-			tft.fillRect(2, 2, 5 * 6 * 2 , 16, BACKGROUND_COLOR);
-			if (hour(tdst) < 10) tft.write('0');
-			tft.print(hour(tdst));
-			tft.write(':');
-			if (minute(tdst) < 10) tft.write('0');
-			tft.print(minute(tdst));
-			old_time = tdst;
+			drawTime();
 		}
 		nextTime = millis() + 1000;
 	}
 	if (nextCheck < millis() && !updateInhibit) {
 		if (WiFi.status() != WL_CONNECTED) {
 			Serial.println("Disconnected");
+			failedConnection += 1;
+		} else {
+			failedConnection = 0;
+		}
+		// Try to refetch station
+		if (fromStation == NULL) {
+			fromStation = db.getStation(fromStationName);
+		}
+		// Reconfigure if station is still unknown
+		if (fromStation == NULL) {
+			strncpy(errorMessage, "Station konnte nicht\nabgerufen werden.", sizeof(errorMessage));
+			// No changes made, connection issue? Try to restart.
+			if (doReconfig()) {
+				ESP.restart();
+			}
 		}
 		Serial.println("Reload");
 		da = db.getDepartures(fromStation->stationId, NULL, tdst, 11, 3, filter);
 		Serial.println();
 		departure = da;
+		if (departure != NULL) {
+			failedConnection = 0; // Reset, as we got a result anyways.
+		}
 		uint16_t pos = 21;
-		char buf[10];
 	    while (departure != NULL) {
-			pos += 18;
-			if (pos + 16 > tft.height()) break;
-#ifdef WIDE_MODE
-			tft.fillRect(0, pos - 1, 11 * 6 + 4 , 17, FOREGROUND_COLOR);
-#else // WIDE_MODE
-			tft.fillRect(0, pos - 1, 9 * 6 + 4 , 17, FOREGROUND_COLOR);
-#endif // WIDE_MODE
-			tft.setTextColor(BACKGROUND_COLOR);
-			tft.setTextSize(1);
-			tft.setCursor(2, pos);
-			snprintf(buf, sizeof(buf), "%02d:%02d", hour(departure->time), minute(departure->time));
-			tft.print(buf);
-#ifdef WIDE_MODE
-			if (!departure->cancelled && departure->delay) {
-				tft.print(" +");
-				tft.print(departure->delay);
-			}
-#endif // WIDE_MODE
-			tft.setCursor(2, pos + 8);
-			tft.print(departure->product);
-			if (strcmp("", departure->textline)) {
-				tft.write(' ');
-				tft.print(departure->textline);
-			}
-			tft.setTextColor(FOREGROUND_COLOR);
-#ifdef WIDE_MODE
-			tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
-			printScroll(departure->target, 11 * 6 + 6, pos, true, departure->cancelled);
-#else // WIDE_MODE
-			tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
-			tft.setCursor(9 * 6 + 6, pos);
-			tft.setTextSize(1);
-			tft.print(departure->target);
-#endif // WIDE_MODE
-
-#ifndef WIDE_MODE
-			tft.setTextColor(HIGHLIGHT_COLOR);
-			tft.setCursor(9 * 6 + 6, pos + 8);
-			if (departure->cancelled) {
-				tft.print("Fahrt f\x84llt aus");
-				tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(departure->target) * 6 - 1, FOREGROUND_COLOR);
-			} else if (departure->delay) {
-				tft.print("ca. ");
-				tft.print(departure->delay);
-				tft.print(" Minuten sp\x84ter");
-			}
-#endif
-			tft.setTextColor(FOREGROUND_COLOR);
-			tft.setTextSize(2);
-			tft.setCursor(tft.width() - 7 * 6 * 2, pos);
-			if (strcmp("", departure->newPlatform) && strcmp(departure->platform, departure->newPlatform)) {
-				tft.setTextColor(HIGHLIGHT_COLOR);
-				//tft.print("->");
-				tft.print(departure->newPlatform);
-			} else {
-				tft.print(departure->platform);
-			}
+			if (!drawDeparture(departure, pos)) break;
 			departure = departure->next;
 		}
-		// clear empty spots (not enough departures)
-		while (pos + 16 + 18 <= tft.height()) {
+		tft.setTextColor(COLOR_RED);
+		// clear empty spots (not enough departures) only if no failed connection.
+		while (pos + 16 + 18 <= tft.height() && !failedConnection) {
 			pos += 18;
-			tft.fillRect(0, pos - 1, tft.width(), 17, BACKGROUND_COLOR);
+			tft.fillRect(0, pos - 1, tft.width(), 18, backgroundColor);
+		}
+		if (failedConnection == 5) {
+			tft.fillScreen(COLOR_RED);
+			tft.setTextColor(COLOR_WHITE);
+			tft.setFont();
+			tft.setTextSize(2);
+			tft.setCursor(0, 0);
+			tft.println("WLAN Verbindung fehl\n-geschlagen");
+			tft.print("Starte neu...");
+			delay(5000);
+			ESP.restart();
 		}
 		nextCheck = millis() + 50000;
 	}
@@ -580,51 +691,6 @@ void loop() {
 			Serial.println(brightness);
 #endif
 			nextBrightness = millis() + 10;
-		}
-	}
-}
-
-void printScroll(String text, uint16_t x, uint16_t y, bool force, bool cancelled) {
-#ifdef TEXT_FILL
-	tft.setTextColor(FOREGROUND_COLOR, BACKGROUND_COLOR);
-#else // TEXT_FILL
-	tft.setTextColor(FOREGROUND_COLOR);
-#endif // TEXT_FILL
-	tft.setTextSize(2);
-	if (text.length() > SCROLL_CHARS || force) {
-#ifdef SCROLLING_ENABLED
-		uint32_t p = scroll;
-		int16_t ts = text.length() - SCROLL_CHARS;
-		if (ts < 0) {
-			ts = 0;
-		}
-		uint32_t to_scroll = ts;
-		p %= to_scroll * 2 + SCROLL_STALL * 2;
-		if (p <= to_scroll) {
-			if (!force && p == 0) return; // do not update 0 position
-		} else if (p <= to_scroll + SCROLL_STALL) {
-			p = to_scroll;
-			if (!force) return; // do not update on stall, if no update is forced
-		} else if (p <= to_scroll * 2 + SCROLL_STALL) {
-			p = SCROLL_STALL + to_scroll * 2 - p;
-		} else {
-			p = 0;
-			if (!force) return; // do not update on stall, if no update is forced
-		}
-#else // SCOLLING_ENABLED
-		if (!force) return;
-		uint32_t p = 0;
-#endif // SCROLLING_ENABLED
-#ifndef TEXT_FILL
-		tft.fillRect(x - 2, y - 1, SCROLL_CHARS * 6 * 2, 17, BACKGROUND_COLOR);
-#endif // TEXT_FILL
-		tft.setCursor(x, y);
-		text = text.substring(p, p + SCROLL_CHARS);
-		tft.print(text);
-		if (cancelled) {
-			uint8_t len = min((uint8_t) text.length(), (uint8_t) SCROLL_CHARS);
-			tft.drawFastHLine(x, y + 6, (len * 6 - 1) * 2, FOREGROUND_COLOR);
-			tft.drawFastHLine(x, y + 7, (len * 6 - 1) * 2, FOREGROUND_COLOR);
 		}
 	}
 }
