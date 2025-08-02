@@ -8,6 +8,14 @@ Abfartstafel aus dem DBTFT Beispiel
 
 Wenn die Bibliothek hilfreich ist, gerne den Sponsor-Button von GitHub nutzen (PayPal).
 
+## Beispielcode
+
+Der DBTFT-Beispielcode ist für einen ESP8266 mit ILI9341 oder ein "Cheap Yellow Display" (ESP32 mit ILI9341 oder ST7798) ausgelegt.
+Mittels Webinterface lassen sich diverse Parameter konfigurieren (zunächst Einrichtung des WLANs, Stationsname, Zuggattungen, verschiedene Designs).
+Für das CYD ist darüber hinaus automatisches Dimmen des Displays mittels des eingebauten LDRs verfügbar.
+Updates sind sowohl über das Webinterface, als auch espota zusätzlich zur klassischen Installation über USB möglich.
+Kompilieren vorzugsweise über platformio, Erstinstallation mit einem fertigen Binary ist auch etwa über den [ESPHome Webinstaller](https://web.esphome.io/) möglich.
+
 ## Abfrage
 
 `setAGFXOutput(bool)` kann aufgerufen werden, um die automatische Ersetzung von Umlauten für Adafruit GFX vorzunehmen (true) oder Umlaute in ue, oe, ss, etc. umzuwandeln(false).
