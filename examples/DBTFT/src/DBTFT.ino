@@ -43,12 +43,73 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 #define COLOR_ORANGE 0xFBE0
 
 // Optional view with large destinations, does interfere with platform when station names are longer
-#define WIDE_MODE
-#define SCROLL_CHARS     13
+#ifndef ESP8266 // ESP8266 display output is too slow
+#define SCROLLING_ENABLED
+#endif
 #define SCROLL_STALL      5
 #define SCROLL_INTERVAL 400
-//#define SCROLLING_ENABLED
-//#define TEXT_FILL
+#define TEXT_FILL
+
+typedef struct {
+	uint8_t  id;
+	uint8_t  headerOffset;
+	uint8_t  itemHeight;
+	uint8_t  targetX;
+	uint8_t  maxTextLength;
+	uint8_t  maxEntries;
+	uint16_t foregroundColor;
+	uint16_t backgroundColor;
+	uint16_t highlightColor;
+	bool     canScroll;
+} design_t;
+
+enum designID {
+	DESIGN_WIDE,
+	DESIGN_DETAIL,
+	DESIGN_LED,
+	MAX_DESIGNS
+};
+
+design_t designs[] = {
+	{
+		DESIGN_WIDE,
+		39,           //headerOffset
+		18,           //itemHeight
+		11 * 6 + 6,   //targetX
+		13,           //maxTextLength
+		11,           //maxEntries
+		COLOR_WHITE,  //foreground
+		COLOR_BLUE,   //background
+		COLOR_YELLOW, //highlight
+		true          //canScroll
+	},
+	{
+		DESIGN_DETAIL,
+		39,           //headerOffset
+		18,           //itemHeight
+		9 * 6 + 6,    //targetX
+		30,           //maxTextLength
+		11,           //maxEntries
+		COLOR_WHITE,  //foreground
+		COLOR_BLUE,   //background
+		COLOR_YELLOW, //highlight
+		false         //canScroll
+	},
+	{
+		DESIGN_LED,
+		21,           //headerOffset
+		18,           //itemHeight
+		4 * 12 + 6,   //targetX
+		16,           //maxTextLength
+		12,           //maxEntries
+		COLOR_ORANGE, //foreground
+		COLOR_BLACK,  //background
+		COLOR_ORANGE, //highlight
+		true          //canScroll
+	}
+};
+
+design_t* activeDesign = &designs[0];
 
 DBAPI db;
 DBstation* fromStation;
@@ -62,12 +123,15 @@ uint32_t nextBrightness;
 uint32_t scroll;
 time_t old_time;
 bool updateInhibit = false;
+#ifdef SCROLLING_ENABLED
+bool scrollingEnabled = true;
+#else
+bool scrollingEnabled = false;
+#endif
 uint16_t currentBrightness = 0;
 uint8_t  rotation = 1;
 uint8_t  failedConnection = 0;
-uint16_t backgroundColor = COLOR_BLUE;
-uint16_t highlightColor  = COLOR_YELLOW;
-uint16_t foregroundColor = COLOR_WHITE;
+uint8_t  failedUpdates = 0;
 char     errorMessage[50];
 
 #ifdef BOARD_2432S028R
@@ -122,31 +186,42 @@ time_t getNtpTime() {
 }
 
 void drawStaticContent() {
-	tft.fillScreen(backgroundColor);
-	tft.setTextColor(foregroundColor);
+	tft.fillScreen(activeDesign->backgroundColor);
+	tft.setTextColor(activeDesign->foregroundColor);
 	tft.setTextSize(2);
-	//tft.setCursor((tft.width() - (strlen(fromStationName) * 6 - 1) * 2) / 2, 2);
-	tft.setCursor(11 * 6 + 6, 2);
-	tft.print(fromStationName);
-	tft.fillRect(0, 18, tft.width(), 18, highlightColor);
-	tft.setTextColor(backgroundColor);
-	tft.setCursor(2, 20);
-	tft.print("Zeit");
-#ifdef WIDE_MODE
-	tft.setCursor(11 * 6 + 6, 20);
-#else // WIDE_MODE
-	tft.setCursor(9 * 6 + 6, 20);
-#endif // WIDE_MODE
-	tft.print("Nach");
-	tft.setCursor(tft.width() - 7 * 6 * 2, 20);
-	tft.print("Gleis");
+	switch (activeDesign->id) {
+	case DESIGN_WIDE:
+	case DESIGN_DETAIL:
+		tft.setCursor(11 * 6 + 6, 2);
+		tft.print(fromStationName);
+		tft.fillRect(0, 18, tft.width(), 18, activeDesign->highlightColor);
+		tft.setTextColor(activeDesign->backgroundColor);
+		tft.setCursor(2, 20);
+		tft.print("Zeit");
+		tft.setCursor(activeDesign->targetX, 20);
+		tft.print("Nach");
+		tft.setCursor(tft.width() - 7 * 6 * 2, 20);
+		tft.print("Gleis");
+		break;
+	case DESIGN_LED:
+		tft.setCursor(0, 2);
+		tft.print(fromStationName);
+	}
 }
 
 void drawTime() {
-	tft.setTextColor(foregroundColor);
+	tft.setTextColor(activeDesign->foregroundColor);
 	tft.setTextSize(2);
-	tft.setCursor(2, 2);
-	tft.fillRect(2, 2, 5 * 6 * 2 , 16, backgroundColor);
+	switch (activeDesign->id) {
+		case DESIGN_WIDE:
+		case DESIGN_DETAIL:
+			tft.setCursor(2, 2);
+			tft.fillRect(2, 2, 5 * 6 * 2 , 16, activeDesign->backgroundColor);
+			break;
+		case DESIGN_LED:
+			tft.setCursor(tft.width() - 5 * 12, 2);
+			tft.fillRect(tft.width() - 5 * 12, 2, 5 * 6 * 2 , 16, activeDesign->backgroundColor);
+	}
 	if (hour(tdst) < 10) tft.write('0');
 	tft.print(hour(tdst));
 	tft.write(':');
@@ -158,107 +233,135 @@ void drawTime() {
 bool drawDeparture(DBdeparr* departure, uint16_t &pos) {
 	Serial.println("Drawing next departure.");
 	char buf[10];
-	pos += 18;
-	if (pos + 16 > tft.height()) return false;
-#ifdef WIDE_MODE
-	tft.fillRect(0, pos - 1, 11 * 6 + 4 , 17, foregroundColor);
-#else // WIDE_MODE
-	tft.fillRect(0, pos - 1, 9 * 6 + 4 , 17, foregroundColor);
-#endif // WIDE_MODE
-	tft.setTextColor(backgroundColor);
-	tft.setTextSize(1);
-	tft.setCursor(2, pos);
-	snprintf(buf, sizeof(buf), "%02d:%02d", hour(departure->time), minute(departure->time));
-	tft.print(buf);
-#ifdef WIDE_MODE
-	if (!departure->cancelled && departure->delay) {
-		tft.print(" +");
-		tft.print(departure->delay);
-	}
-#endif // WIDE_MODE
-	tft.setCursor(2, pos + 8);
-	tft.print(departure->product);
-	if (strcmp("", departure->textline)) {
-		tft.write(' ');
-		tft.print(departure->textline);
-	}
-	tft.setTextColor(foregroundColor);
-#ifdef WIDE_MODE
-	tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, backgroundColor);
-	printScroll(departure->target, 11 * 6 + 6, pos, true, departure->cancelled);
-#else // WIDE_MODE
-	tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, backgroundColor);
-	tft.setCursor(9 * 6 + 6, pos);
-	tft.setTextSize(1);
-	tft.print(departure->target);
-#endif // WIDE_MODE
+	// Next drawn item would be at least partially out of frame
+	if (pos + activeDesign->itemHeight - 2 > tft.height()) return false;
+	switch (activeDesign->id) {
+		case DESIGN_WIDE:
+		case DESIGN_DETAIL: {
+			switch (activeDesign->id) {
+			case DESIGN_DETAIL:
+				tft.fillRect(0, pos - 1, 9 * 6 + 4 , 17, activeDesign->foregroundColor);
+			default:
+				tft.fillRect(0, pos - 1, 11 * 6 + 4 , 17, activeDesign->foregroundColor);
+			}
+			tft.setTextColor(activeDesign->backgroundColor);
+			tft.setTextSize(1);
+			tft.setCursor(2, pos);
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(departure->time), minute(departure->time));
+			tft.print(buf);
+			if (activeDesign->id != DESIGN_DETAIL) {
+				if (!departure->cancelled && departure->delay) {
+					tft.print(" +");
+					tft.print(departure->delay);
+				}
+			}
+			tft.setCursor(2, pos + 8);
+			tft.print(departure->product);
+			if (strcmp("", departure->textline)) {
+				tft.write(' ');
+				tft.print(departure->textline);
+			}
+			tft.setTextColor(activeDesign->foregroundColor);
+			if (activeDesign->id == DESIGN_DETAIL) {
+				tft.fillRect(9 * 6 + 4, pos - 1, tft.width(), 17, activeDesign->backgroundColor);
+				tft.setCursor(9 * 6 + 6, pos);
+				tft.setTextSize(1);
+				tft.print(departure->target);
 
-#ifndef WIDE_MODE
-	tft.setTextColor(highlightColor);
-	tft.setCursor(9 * 6 + 6, pos + 8);
-	if (departure->cancelled) {
-		tft.print("Fahrt f\x84llt aus");
-		tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(departure->target) * 6 - 1, foregroundColor);
-	} else if (departure->delay) {
-		tft.print("ca. ");
-		tft.print(departure->delay);
-		tft.print(" Minuten sp\x84ter");
+				tft.setTextColor(activeDesign->highlightColor);
+				tft.setCursor(9 * 6 + 6, pos + 8);
+				if (departure->cancelled) {
+					tft.print("Fahrt f\x84llt aus");
+					tft.drawFastHLine(9 * 6 + 6, pos + 3, strlen(departure->target) * 6 - 1, activeDesign->foregroundColor);
+				} else if (departure->delay) {
+					tft.print("ca. ");
+					tft.print(departure->delay);
+					tft.print(" Minuten sp\x84ter");
+				}
+			} else {
+				tft.fillRect(11 * 6 + 4, pos - 1, tft.width(), 17, activeDesign->backgroundColor);
+				printScroll(departure->target, pos, true, departure->cancelled);
+			}
+			tft.setTextColor(activeDesign->foregroundColor);
+			tft.setTextSize(2);
+			tft.setCursor(tft.width() - 7 * 6 * 2, pos);
+			if (strcmp("", departure->newPlatform) && strcmp(departure->platform, departure->newPlatform)) {
+				tft.setTextColor(activeDesign->highlightColor);
+				//tft.print("->");
+				tft.print(departure->newPlatform);
+			} else {
+				tft.print(departure->platform);
+			}
+			break;
+		}
+		case DESIGN_LED:
+			tft.fillRect(0, pos - 1, tft.width(), 17, activeDesign->backgroundColor);
+			tft.setTextColor(activeDesign->foregroundColor);
+			tft.setTextSize(2);
+			tft.setCursor(2, pos);
+			const char padding[] = "   ";
+			//snprintf(buf, sizeof(buf), "%*.*s%s", 3, 3, padding, departure->textline);
+			snprintf(buf, 5, "% 4s", departure->textline);
+			//buf[4] = 0;
+			tft.print(buf);
+			printScroll(departure->target, pos, true, departure->cancelled);
+			tft.setCursor(tft.width() - 5 * 12, pos);
+			snprintf(buf, sizeof(buf), "%02d:%02d", hour(departure->realTime), minute(departure->realTime));
+			tft.print(buf);
+			break;
 	}
-#endif
-	tft.setTextColor(foregroundColor);
-	tft.setTextSize(2);
-	tft.setCursor(tft.width() - 7 * 6 * 2, pos);
-	if (strcmp("", departure->newPlatform) && strcmp(departure->platform, departure->newPlatform)) {
-		tft.setTextColor(highlightColor);
-		//tft.print("->");
-		tft.print(departure->newPlatform);
-	} else {
-		tft.print(departure->platform);
-	}
+	pos += activeDesign->itemHeight;
 	return true;
 }
 
-void printScroll(String text, uint16_t x, uint16_t y, bool force, bool cancelled) {
+void printScroll(String text, uint16_t y, bool force, bool cancelled) {
 #ifdef TEXT_FILL
-	tft.setTextColor(foregroundColor, backgroundColor);
+	tft.setTextColor(activeDesign->foregroundColor, activeDesign->backgroundColor);
 #else // TEXT_FILL
-	tft.setTextColor(foregroundColor);
+	tft.setTextColor(activeDesign->foregroundColor);
 #endif // TEXT_FILL
 	tft.setTextSize(2);
-	if (text.length() > SCROLL_CHARS || force) {
-#ifdef SCROLLING_ENABLED
-		uint32_t p = scroll;
-		int16_t ts = text.length() - SCROLL_CHARS;
-		if (ts < 0) {
-			ts = 0;
-		}
-		uint32_t to_scroll = ts;
-		p %= to_scroll * 2 + SCROLL_STALL * 2;
-		if (p <= to_scroll) {
-			if (!force && p == 0) return; // do not update 0 position
-		} else if (p <= to_scroll + SCROLL_STALL) {
-			p = to_scroll;
-			if (!force) return; // do not update on stall, if no update is forced
-		} else if (p <= to_scroll * 2 + SCROLL_STALL) {
-			p = SCROLL_STALL + to_scroll * 2 - p;
-		} else {
-			p = 0;
-			if (!force) return; // do not update on stall, if no update is forced
-		}
-#else // SCOLLING_ENABLED
-		if (!force) return;
+	if (text.length() > activeDesign->maxTextLength || force) {
 		uint32_t p = 0;
-#endif // SCROLLING_ENABLED
+		if (scrollingEnabled && activeDesign->canScroll) {
+			p = scroll;
+			int16_t ts = text.length() - activeDesign->maxTextLength;
+			if (ts < 0) {
+				ts = 0;
+			}
+			uint32_t to_scroll = ts;
+			p %= to_scroll * 2 + SCROLL_STALL * 2;
+			if (p <= to_scroll) {
+				if (!force && p == 0) return; // do not update 0 position
+			} else if (p <= to_scroll + SCROLL_STALL) {
+				p = to_scroll;
+				if (!force) return; // do not update on stall, if no update is forced
+			} else if (p <= to_scroll * 2 + SCROLL_STALL) {
+				p = SCROLL_STALL + to_scroll * 2 - p;
+			} else {
+				p = 0;
+				if (!force) return; // do not update on stall, if no update is forced
+			}
+		} else {
+			if (!force) return;
+		}
 #ifndef TEXT_FILL
-		tft.fillRect(x - 2, y - 1, SCROLL_CHARS * 6 * 2, 17, backgroundColor);
+		tft.fillRect(activeDesign->targetX - 2, y - 1, activeDesign->maxTextLength * 6 * 2, activeDesign->itemHeight, activeDesign->backgroundColor);
 #endif // TEXT_FILL
-		tft.setCursor(x, y);
-		text = text.substring(p, p + SCROLL_CHARS);
+		tft.setCursor(activeDesign->targetX, y);
+		text = text.substring(p, p + activeDesign->maxTextLength);
 		tft.print(text);
-		if (cancelled) {
-			uint8_t len = min((uint8_t) text.length(), (uint8_t) SCROLL_CHARS);
-			tft.drawFastHLine(x, y + 6, (len * 6 - 1) * 2, foregroundColor);
-			tft.drawFastHLine(x, y + 7, (len * 6 - 1) * 2, foregroundColor);
+		switch (activeDesign->id) {
+		case DESIGN_WIDE:
+		case DESIGN_LED:
+			if (cancelled) {
+				uint8_t len = text.length();
+				tft.drawFastHLine(activeDesign->targetX, y + 6, (len * 6 - 1) * 2, activeDesign->foregroundColor);
+				tft.drawFastHLine(activeDesign->targetX, y + 7, (len * 6 - 1) * 2, activeDesign->foregroundColor);
+			}
+			break;
+		default:
+			break;
 		}
 	}
 }
@@ -285,6 +388,11 @@ WiFiManagerParameter ldrParameter("ldrpin", "Lichtsensor (-1 zum Deaktivieren, 1
 #else
 WiFiManagerParameter ldrParameter("ldrpin", "Lichtsensor (-1 zum Deaktivieren, CYD z.B. 34 zum Aktivieren)", String(ldr_pin).c_str(), 2);
 #endif
+#ifdef SCROLLING_ENABLED
+WiFiManagerParameter scrollingParameter("scrolling", "Lange Stationen scrollen (1 zum Aktivieren)", String(scrollingEnabled).c_str(), 1);
+#endif
+String maxDesignString = String("Design-ID (min 0, max ") + String(MAX_DESIGNS - 1) + ")";
+WiFiManagerParameter designParameter("design", (maxDesignString).c_str(), String(activeDesign->id).c_str(), 2);
 WiFiManagerParameter filterICEParameter("filterICE", "Hochgeschwindigkeitsz&uuml;ge (1 zum Aktivieren)", String((filter & PROD_ICE) > 0).c_str(), 1);
 WiFiManagerParameter filterICECParameter("filterICEC", "Intercity- und Eurocityz&uuml;ge 1 zum Aktivieren)", String((filter & PROD_IC_EC) > 0).c_str(), 1);
 WiFiManagerParameter filterIRParameter("filterIR", "Interregio- und Schnellz&uuml;ge (1 zum Aktivieren)", String((filter & PROD_IR) > 0).c_str(), 1);
@@ -377,6 +485,31 @@ void readParams() {
 	} else {
 		Serial.println("File /ldr not found");
 	}
+#ifdef SCROLLING_ENABLED
+	if (LittleFS.exists("/scrolling")) {
+		File f = LittleFS.open("/scrolling", "r");
+		if (f) {
+			scrollingEnabled = f.read();
+		} else {
+			Serial.println("File /scrolling not open");
+		}
+	} else {
+		Serial.println("File /scrolling not found");
+	}
+#endif
+	if (LittleFS.exists("/design")) {
+		File f = LittleFS.open("/design", "r");
+		if (f) {
+			uint8_t d = f.read();
+			if (d < MAX_DESIGNS) {
+				activeDesign = &designs[d];
+			}
+		} else {
+			Serial.println("File /design not open");
+		}
+	} else {
+		Serial.println("File /design not found");
+	}
 	if (LittleFS.exists("/filter")) {
 		File f = LittleFS.open("/filter", "r");
 		if (f) {
@@ -435,6 +568,27 @@ void afterConfigCallback() {
 			tft.setRotation(rotation);
 			Serial.print("Rotation gesetzt: ");
 			Serial.println(rotation);
+		}
+		ldr_pin = atoi(ldrParameter.getValue());
+		{
+			File f = LittleFS.open("/ldr", "w");
+			f.print(ldrParameter.getValue());
+			f.close();
+		}
+#ifdef SCROLLING_ENABLED
+		scrollingEnabled = scrollingParameter.getValue()[0] == '1';
+		{
+			File f = LittleFS.open("/design", "w");
+			f.write(scrollingEnabled);
+			f.close();
+		}
+#endif
+		uint8_t d = atoi(designParameter.getValue());
+		if (d < MAX_DESIGNS) {
+			File f = LittleFS.open("/design", "w");
+			f.write(d);
+			f.close();
+			activeDesign = &designs[d];
 		}
 		ldr_pin = atoi(ldrParameter.getValue());
 		{
@@ -513,6 +667,12 @@ void setup() {
 	wifiManager.addParameter(&rotationParameter);
 	ldrParameter.setValue(String(ldr_pin).c_str(), 2);
 	wifiManager.addParameter(&ldrParameter);
+#ifdef SCROLLING_ENABLED
+	scrollingParameter.setValue(String(scrollingEnabled).c_str(), 1);
+	wifiManager.addParameter(&scrollingParameter);
+#endif
+	designParameter.setValue(String(activeDesign->id).c_str(), 2);
+	wifiManager.addParameter(&designParameter);
 	filterICEParameter.setValue(String((filter & PROD_ICE) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterICEParameter);
 	filterICECParameter.setValue(String((filter & PROD_IC_EC) > 0).c_str(), 1);
@@ -603,7 +763,7 @@ void loop() {
 	if (nextCheck < millis() && !updateInhibit) {
 		if (WiFi.status() != WL_CONNECTED) {
 			Serial.println("Disconnected");
-			failedConnection += 1;
+			failedConnection++;
 		} else {
 			failedConnection = 0;
 		}
@@ -620,22 +780,27 @@ void loop() {
 			}
 		}
 		Serial.println("Reload");
-		da = db.getDepartures(fromStation->stationId, NULL, tdst, 11, 3, filter);
+		da = db.getDepartures(fromStation->stationId, NULL, tdst, activeDesign->maxEntries, 3, filter);
 		Serial.println();
 		departure = da;
 		if (departure != NULL) {
 			failedConnection = 0; // Reset, as we got a result anyways.
+			failedUpdates = 0;
+		} else {
+			failedUpdates++;
+			Serial.print("Update failed, currently at ");
+			Serial.println(failedUpdates);
 		}
-		uint16_t pos = 21;
+		uint16_t pos = activeDesign->headerOffset;
 		while (departure != NULL) {
 			if (!drawDeparture(departure, pos)) break;
 			departure = departure->next;
 		}
 		tft.setTextColor(COLOR_RED);
-		// clear empty spots (not enough departures) only if no failed connection.
-		while (pos + 16 + 18 <= tft.height() && !failedConnection) {
-			pos += 18;
-			tft.fillRect(0, pos - 1, tft.width(), 18, backgroundColor);
+		// clear empty spots (not enough departures) only if we got data.
+		while (pos + activeDesign->itemHeight * 2 - 2 <= tft.height() && da != NULL) {
+			pos += activeDesign->itemHeight;
+			tft.fillRect(0, pos - 1, tft.width(), 18, activeDesign->backgroundColor);
 		}
 		if (failedConnection == 5) {
 			tft.fillScreen(COLOR_RED);
@@ -650,19 +815,17 @@ void loop() {
 		}
 		nextCheck = millis() + 50000;
 	}
-#ifdef WIDE_MODE
-	if (nextScroll < millis() && !updateInhibit) {
+	if (scrollingEnabled && activeDesign->canScroll && nextScroll < millis() && !updateInhibit && da != NULL) {
 		departure = da;
-		uint16_t pos = 21;
-	    while (departure != NULL) {
-			pos += 18;
-			printScroll(departure->target, 11 * 6 + 6, pos, false, departure->cancelled);
+		uint16_t pos = activeDesign->headerOffset;
+		while (departure != NULL && pos + activeDesign->itemHeight - 2 < tft.height()) {
+			printScroll(departure->target, pos, false, departure->cancelled);
+			pos += activeDesign->itemHeight;
 			departure = departure->next;
 		}
 		scroll++;
 		nextScroll = millis() + SCROLL_INTERVAL;
 	}
-#endif
 #ifdef ENABLEOTA
 	ArduinoOTA.handle();
 #endif
