@@ -554,7 +554,7 @@ void setup() {
 #else
 	while (WiFi.status() != WL_CONNECTED) {
 		tft.write('.');
-    	Serial.write('.');
+		Serial.write('.');
 		delay(500);
 	}
 #endif
@@ -627,7 +627,7 @@ void loop() {
 			failedConnection = 0; // Reset, as we got a result anyways.
 		}
 		uint16_t pos = 21;
-	    while (departure != NULL) {
+		while (departure != NULL) {
 			if (!drawDeparture(departure, pos)) break;
 			departure = departure->next;
 		}
