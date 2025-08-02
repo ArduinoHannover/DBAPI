@@ -118,6 +118,10 @@ DBdeparr* DBAPI::getStationBoard(
 		uint8_t     maxDuration,
 		uint16_t    productFilter
 	) {
+	// sanity check, if no station is supplied, a request would crash ArduinJSON later.
+	if (stationId == NULL || !strlen(stationId)) {
+		return NULL;
+	}
 	while (deparr != NULL) {
 		DBdeparr* next = deparr->next;
 		free(deparr);
