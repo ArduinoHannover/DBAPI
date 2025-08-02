@@ -40,7 +40,7 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 #define COLOR_BLACK  0x0000
 #define COLOR_BLUE   0x001F
 #define COLOR_YELLOW 0xFFE0
-#define COLOR_ORANGE 0xFDA0
+#define COLOR_ORANGE 0xFBE0
 
 // Optional view with large destinations, does interfere with platform when station names are longer
 #define WIDE_MODE
