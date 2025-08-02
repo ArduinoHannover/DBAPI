@@ -59,6 +59,7 @@ uint32_t nextCheck;
 uint32_t nextTime;
 uint32_t nextScroll;
 uint32_t nextBrightness;
+uint32_t scroll;
 time_t old_time;
 bool updateInhibit = false;
 uint16_t currentBrightness = 0;
@@ -589,7 +590,6 @@ void setup() {
 	drawStaticContent();
 }
 
-uint32_t scroll;
 void loop() {
 	if (nextTime < millis() && !updateInhibit) {
 		timeClient.update();
