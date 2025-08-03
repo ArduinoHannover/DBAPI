@@ -1,10 +1,10 @@
 # DBAPI
-Hacon/Hafas/Deutsche Bahn API für ESP8266
+Hacon/Hafas/Deutsche Bahn API für ESP8266/ESP32
 
 [![PlatformIO Registry](https://badges.registry.platformio.org/packages/soundstorm/library/DBAPI.svg)](https://registry.platformio.org/libraries/soundstorm/DBAPI)
 
 ![tft_hannover_hbf](https://user-images.githubusercontent.com/193273/200298925-0f80dfdb-e17f-4f26-a28f-67b808540332.jpg)
-Abfartstafel aus dem DBTFT Beispiel
+Abfartstafel aus dem DBTFT Beispiel (Design ID 1) auf einem ILI9341
 
 Wenn die Bibliothek hilfreich ist, gerne den Sponsor-Button von GitHub nutzen (PayPal).
 
