@@ -29,7 +29,7 @@
 	const char* otaPassword = "iliketrains";
 	#include <ArduinoOTA.h>
 #endif
-char fromStationName[40] = "Hannnover Hbf";
+char fromStationName[40] = "Hannover Hbf";
 uint16_t filter = PROD_RE | PROD_S;
 
 WiFiUDP ntpUDP;
