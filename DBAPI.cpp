@@ -219,6 +219,7 @@ DBdeparr* DBAPI::getStationBoard(
 			}
 			// duplicate entry found, skipping
 			if (match) continue;
+			memcpy(hashes[cnt], hash, sizeof(hash));
 
 			DBdeparr* da = new DBdeparr();
 			String targ = doc[abfahrt?"richtung":"abgangsOrt"];
