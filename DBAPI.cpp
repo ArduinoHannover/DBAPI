@@ -143,7 +143,7 @@ DBdeparr* DBAPI::getStationBoard(
 	}
 	reqDoc["ursprungsBahnhofId"] = stationId;
 
-	for (uint8_t offset = 0; offset < maxDuration; offset++) {
+	for (uint8_t offset = 0; offset < maxDuration && cnt < maxCount; offset++) {
 		// Get current time, if requesting more than one hour and no request time is set
 		// Sanity check, that year is > 2020, so only successful synced time is used
 		// Your device would probably not survive 2020 years without restart, huh?
