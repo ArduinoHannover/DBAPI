@@ -48,7 +48,9 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 #endif
 #define SCROLL_STALL      5
 #define SCROLL_INTERVAL 400
+#ifdef ESP32
 #define TEXT_FILL
+#endif
 
 typedef struct {
 	uint8_t  id;
