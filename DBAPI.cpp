@@ -204,7 +204,7 @@ DBdeparr* DBAPI::getStationBoard(
 
 			uint8_t hash[20];
 			// hash to save RAM as the ID is >150 chars
-			sha1(doc["zuglaufId"], hash);
+			sha1(doc["zuglaufId"].as<String>(), hash);
 
 			bool match = false;
 			for (uint8_t i = 0; i < cnt && !match; i++) {
