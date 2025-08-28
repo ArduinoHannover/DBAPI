@@ -215,7 +215,9 @@ DBdeparr* DBAPI::getStationBoard(
 			return deparr;
 		}
 		JsonDocument doc;
-		client.find(":["); // Skip to first element
+		if (!client.find(":[")) { // Skip to first element
+			return deparr;
+		}
 		do {
 			DeserializationError error = deserializeJson(doc, client);
 			if (error) {
