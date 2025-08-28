@@ -26,6 +26,15 @@ struct DBstation {
 	DBstation* next;
 };
 
+enum DBerror {
+	DBERR_NONE,
+	DBERR_REQ_FAILED,
+	DBERR_RESP_INVALID,
+	DBERR_NOSTATIONID,
+	DBERR_DESERIALIZATION_FAILED,
+	DBERR_NO_JSON_FOUND
+};
+
 enum DBproduct {
 	PROD_ICE     = 1 <<  9,
 	PROD_IC_EC   = 1 <<  8,
@@ -53,6 +62,7 @@ class DBAPI {
 		DBstation* stations = NULL;
 		enum DBumlaut repum = REP_NONE;
 		static const char* services[];
+		DBerror err = DBERR_NONE;
 	public:
 		DBAPI();
 		DBstation* getStation(
@@ -91,6 +101,7 @@ class DBAPI {
 			uint8_t     maxDuration   =    1,
 			uint16_t    productFilter = 1023
 		);
+		DBerror getError();
 		// Output Adafruit GFX compatible Umlauts for default font
 		void setAGFXOutput(bool gfx);
 		void setUmlaut(enum DBumlaut uml);

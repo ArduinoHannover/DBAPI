@@ -19,12 +19,15 @@ DBAPI::DBAPI() {
  * @param address Address to request nearest stations from - currently not implemented, leave as NULL
  * @param num     Maxmium of stations to request
  * @return DBstation* array, possibly NULL if no results were found
+ * @note see getError to check if request was successful and is just empty because no station was found
  */
 DBstation* DBAPI::getStation(
 		const char* name,
 		const char* address,
 		uint8_t     num
 	) {
+	// Assume all is good at first
+	err = DBERR_NONE;
 	while (stations != NULL) {
 		DBstation* next = stations->next;
 		free(stations);
@@ -44,6 +47,7 @@ DBstation* DBAPI::getStation(
 	client.setInsecure(); // Don't check fingerprint
 	if (!client.connect(host, 443)) {
 		DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
+		err = DBERR_REQ_FAILED;
 		return NULL;
 	}
 	String json = String("{\"locationTypes\":[\"ST\"],\"searchTerm\":\"") + name + "\"}";
@@ -55,6 +59,7 @@ DBstation* DBAPI::getStation(
 	char endOfHeaders[] = "\r\n\r\n";
 	if (!client.find(endOfHeaders)) {
 		DB_DEBUG_MSG("Did not find headers\n");
+		err = DBERR_RESP_INVALID;
 		return stations;
 	}
 	JsonDocument doc;
@@ -62,10 +67,11 @@ DBstation* DBAPI::getStation(
 	if (error) {
 		DB_DEBUG_MSG("deserializeJson() on Station failed");
 		DB_DEBUG_MSG(error.c_str());
+		err = DBERR_DESERIALIZATION_FAILED;
 		return stations;
 	}
 	DBstation* prev = NULL;
-	for (uint8_t i = 0; i < doc.size(); i++) {
+	for (uint8_t i = 0; i < doc.size() && i < num; i++) {
 		DBstation* station = new DBstation();
 		JsonObject st = doc[i];
 		String stationname = st["name"];
@@ -121,6 +127,17 @@ DBstation* DBAPI::getStationByCoord(
 }
 
 /**
+ * Get last errorcode to check if the request was successful.
+ * Most likely to be useful, when NULL is returned, but it can't be distinguished,
+ * if the request was malformed, any function or request failed or there are simply
+ * no more results available with the given parameters.
+ * @return DBerror enum errorcode
+ */
+DBerror DBAPI::getError() {
+	return err;
+}
+
+/**
  * Requests departures/arrivals from/at given stationID.
  * @param type abfahrt or ankunft
  * @param stationId ID of stations, can be acquired by getStation(...)->stationId
@@ -130,6 +147,7 @@ DBstation* DBAPI::getStationByCoord(
  * @param maxDuration maximum of hours to request (each hour will possibly generate a new http request)
  * @param productFilter any combination of DBprod values for service types to request
  * @return DBdeparr array, possibly NULL if no service is available with the requested parameters or an error occured
+ * @note see getError to check if request was successful and is just empty because no service is available
  */
 DBdeparr* DBAPI::getStationBoard(
 		const char  type[8],
@@ -140,8 +158,12 @@ DBdeparr* DBAPI::getStationBoard(
 		uint8_t     maxDuration,
 		uint16_t    productFilter
 	) {
+	// Assume all is good at first
+	err = DBERR_NONE;
 	// sanity check, if no station is supplied, a request would crash ArduinJSON later.
 	if (stationId == NULL || !strlen(stationId)) {
+		DB_DEBUG_MSG("DBAPI: StationID was not supplied.\n");
+		err = DBERR_NOSTATIONID;
 		return NULL;
 	}
 	while (deparr != NULL) {
@@ -196,6 +218,7 @@ DBdeparr* DBAPI::getStationBoard(
 		if (!client.connect(host, 443)) {
 			DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
 			free(output);
+			err = DBERR_REQ_FAILED;
 			return NULL;
 		}
 		
@@ -211,19 +234,22 @@ DBdeparr* DBAPI::getStationBoard(
 		free(output);
 		char endOfHeaders[] = "\r\n\r\n";
 		if (!client.find(endOfHeaders)) {
-			DB_DEBUG_MSG("Did not find headers\n");
+			DB_DEBUG_MSG("DBAPI: Did not find headers\n");
+			err = DBERR_RESP_INVALID;
+			// Return so far accumulated array
 			return deparr;
 		}
 		JsonDocument doc;
 		if (!client.find(":[")) { // Skip to first element
+			err = DBERR_NO_JSON_FOUND;
 			return deparr;
 		}
 		do {
 			DeserializationError error = deserializeJson(doc, client);
 			if (error) {
-				DB_DEBUG_MSG("deserializeJson() on departures/arrivals failed");
 				DB_DEBUG_MSG("DBAPI: deserializeJson() on departures/arrivals failed");
 				DB_DEBUG_MSG(error.c_str());
+				//err = DBERR_DESERIALIZATION_FAILED;
 				//return deparr;
 				// No data in array, continue with next hour if selected
 				continue;
