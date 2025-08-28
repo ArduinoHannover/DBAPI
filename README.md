@@ -8,6 +8,13 @@ Abfartstafel aus dem DBTFT Beispiel (Design ID 1) auf einem ILI9341
 
 Wenn die Bibliothek hilfreich ist, gerne den Sponsor-Button von GitHub nutzen (PayPal).
 
+## Abhängigkeiten:
+
+Wenn nicht PlatformIO genutzt wird, werden folgende Bibliotheken zusätzlich benötigt:
+- https://github.com/bblanchon/ArduinoJson
+- https://github.com/paulstoffregen/Time
+- https://github.com/bbx10/Hash_tng (nur für ESP32)
+
 ## Beispielcode
 
 Der DBTFT-Beispielcode ist für einen ESP8266 mit ILI9341 oder ein "Cheap Yellow Display" (ESP32 mit ILI9341 oder ST7798) ausgelegt.
