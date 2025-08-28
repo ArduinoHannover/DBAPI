@@ -782,8 +782,8 @@ void loop() {
 			}
 		}
 		Serial.println("Reload");
-		da = db.getDepartures(fromStation->stationId, NULL, tdst, activeDesign->maxEntries, 3, filter);
-		Serial.println();
+		da = db.getDepartures(fromStation->stationId, NULL, tdst + 7 * 3600, activeDesign->maxEntries, 2, filter);
+		Serial.println(db.getError());
 		departure = da;
 		if (departure != NULL) {
 			failedConnection = 0; // Reset, as we got a result anyways.
@@ -799,10 +799,10 @@ void loop() {
 			departure = departure->next;
 		}
 		tft.setTextColor(COLOR_RED);
-		// clear empty spots (not enough departures) only if we got data.
-		while (pos + activeDesign->itemHeight * 2 - 2 <= tft.height() && da != NULL) {
-			pos += activeDesign->itemHeight;
+		// clear empty spots (not enough departures) only if the request succeeded.
+		while (pos + activeDesign->itemHeight * 2 - 2 <= tft.height() && db.getError() == DBERR_NONE) {
 			tft.fillRect(0, pos - 1, tft.width(), 18, activeDesign->backgroundColor);
+			pos += activeDesign->itemHeight;
 		}
 		if (failedConnection == 5) {
 			tft.fillScreen(COLOR_RED);
