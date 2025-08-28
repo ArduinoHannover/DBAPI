@@ -13,7 +13,13 @@ DBAPI::DBAPI() {
 
 }
 
-
+/**
+ * Get stations matching the name or close to an address
+ * @param name    Name of the station to get
+ * @param address Address to request nearest stations from - currently not implemented, leave as NULL
+ * @param num     Maxmium of stations to request
+ * @return DBstation* array, possibly NULL if no results were found
+ */
 DBstation* DBAPI::getStation(
 		const char* name,
 		const char* address,
@@ -100,6 +106,11 @@ DBstation* DBAPI::getStation(
 	return stations;
 }
 
+/**
+ * Get stations by coordinates
+ * Legacy function, not implemented again
+ * @return NULL currently
+ */
 DBstation* DBAPI::getStationByCoord(
 		uint32_t latitude,
 		uint32_t longitude,
@@ -109,6 +120,17 @@ DBstation* DBAPI::getStationByCoord(
 	return NULL;
 }
 
+/**
+ * Requests departures/arrivals from/at given stationID.
+ * @param type abfahrt or ankunft
+ * @param stationId ID of stations, can be acquired by getStation(...)->stationId
+ * @param target target of service, currently not used, leave as NULL
+ * @param time specify request date/time, leave at 0 if you want to query with current time
+ * @param maxCount maxiumum of services to request (may be lower if maxDuration is reached before maxCount)
+ * @param maxDuration maximum of hours to request (each hour will possibly generate a new http request)
+ * @param productFilter any combination of DBprod values for service types to request
+ * @return DBdeparr array, possibly NULL if no service is available with the requested parameters or an error occured
+ */
 DBdeparr* DBAPI::getStationBoard(
 		const char  type[8],
 		const char* stationId,
@@ -308,6 +330,11 @@ DBdeparr* DBAPI::getStationBoard(
 	return deparr;
 }
 
+/**
+ * Helper to parse string to time_t
+ * @param t Time string in time with potential TZ formatted like 0123-56-89T12:45:67+90:23
+ * @return time_t timestamp
+ */
 time_t DBAPI::parseTime(const char* t) {
 	tmElements_t time;
 	// 0123-56-89T12:45:67+90:23
@@ -321,6 +348,10 @@ time_t DBAPI::parseTime(const char* t) {
 	return makeTime(time);
 }
 
+/**
+ * Wrapper for querying departures
+ * @see getStationBoard
+ */
 DBdeparr* DBAPI::getDepartures(
 		const char* stationId,
 		const char* target,
@@ -332,6 +363,10 @@ DBdeparr* DBAPI::getDepartures(
 	return getStationBoard("abfahrt", stationId, target, time, maxCount, maxDuration, productFilter);
 }
 
+/**
+ * Wrapper for querying arrivals
+ * @see getStationBoard
+ */
 DBdeparr* DBAPI::getArrivals(
 		const char* stationId,
 		const char* target,
@@ -343,14 +378,25 @@ DBdeparr* DBAPI::getArrivals(
 	return getStationBoard("ankunft", stationId, target, time, maxCount, maxDuration, productFilter);
 }
 
+/**
+ * Replace special characters for AdafruitGFX charset
+ * @param gfx If true, will replace for AdafruitGFX, otherwise like ä -> ae
+ */
 void DBAPI::setAGFXOutput(bool gfx) {
 	repum = gfx ? REP_AGFX : REP_UML;
 }
 
+/**
+ * Replace special characters for displays
+ * @param uml `REP_AGFX` for AdafruitGFX, `REP_UML` for simple ä -> ae and REP_NONE for raw output 
+ */
 void DBAPI::setUmlaut(enum DBumlaut uml) {
 	repum = uml;
 }
 
+/**
+ * Translate numeric values into strings for 2025+ API version
+ */
 const char* DBAPI::services[] = {
 	"HOCHGESCHWINDIGKEITSZUEGE",
 	"INTERCITYUNDEUROCITYZUEGE",
