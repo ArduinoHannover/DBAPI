@@ -220,8 +220,11 @@ DBdeparr* DBAPI::getStationBoard(
 			DeserializationError error = deserializeJson(doc, client);
 			if (error) {
 				DB_DEBUG_MSG("deserializeJson() on departures/arrivals failed");
+				DB_DEBUG_MSG("DBAPI: deserializeJson() on departures/arrivals failed");
 				DB_DEBUG_MSG(error.c_str());
-				return deparr;
+				//return deparr;
+				// No data in array, continue with next hour if selected
+				continue;
 			}
 
 			uint8_t current_hash[20];
