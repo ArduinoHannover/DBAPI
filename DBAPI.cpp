@@ -224,24 +224,18 @@ DBdeparr* DBAPI::getStationBoard(
 				return deparr;
 			}
 
-			uint8_t hash[20];
+			uint8_t current_hash[20];
 			// hash to save RAM as the ID is >150 chars
-			sha1(doc["zuglaufId"].as<String>(), hash);
+			sha1(doc["zuglaufId"].as<String>(), current_hash);
 
 			bool match = false;
 			for (uint8_t i = 0; i < cnt && !match; i++) {
-				bool mismatch = false;
-				for (uint8_t j = 0; j < 20; j++) {
-					if (hashes[i][j] != hash[j]) {
-						mismatch = true;
-						break;
-					}
-					match |= !mismatch;
-				}
+				match |= !memcmp(hashes[i], current_hash, sizeof(current_hash));
 			}
 			// duplicate entry found, skipping
 			if (match) continue;
 			memcpy(hashes[cnt], hash, sizeof(hash));
+			memcpy(hashes[cnt], current_hash, sizeof(current_hash));
 
 			DBdeparr* da = new DBdeparr();
 			String targ = doc[abfahrt?"richtung":"abgangsOrt"];
