@@ -239,7 +239,6 @@ DBdeparr* DBAPI::getStationBoard(
 			}
 			// duplicate entry found, skipping
 			if (match) continue;
-			memcpy(hashes[cnt], hash, sizeof(hash));
 			memcpy(hashes[cnt], current_hash, sizeof(current_hash));
 
 			DBdeparr* da = new DBdeparr();
