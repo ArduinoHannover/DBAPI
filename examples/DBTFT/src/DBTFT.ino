@@ -782,7 +782,7 @@ void loop() {
 			}
 		}
 		Serial.println("Reload");
-		da = db.getDepartures(fromStation->stationId, NULL, tdst + 7 * 3600, activeDesign->maxEntries, 2, filter);
+		da = db.getDepartures(fromStation->stationId, NULL, tdst, activeDesign->maxEntries, 3, filter);
 		Serial.println(db.getError());
 		departure = da;
 		if (departure != NULL) {
