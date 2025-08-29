@@ -8,7 +8,7 @@ Abfartstafel aus dem DBTFT Beispiel (Design ID 1) auf einem ILI9341
 
 Wenn die Bibliothek hilfreich ist, gerne den Sponsor-Button von GitHub nutzen (PayPal).
 
-## Abhängigkeiten:
+## Abhängigkeiten
 
 Wenn nicht PlatformIO genutzt wird, werden folgende Bibliotheken zusätzlich benötigt:
 - https://github.com/bblanchon/ArduinoJson
