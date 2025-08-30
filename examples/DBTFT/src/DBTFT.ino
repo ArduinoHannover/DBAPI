@@ -800,7 +800,7 @@ void loop() {
 		}
 		tft.setTextColor(COLOR_RED);
 		// clear empty spots (not enough departures) only if the request succeeded.
-		while (pos + activeDesign->itemHeight * 2 - 2 <= tft.height() && db.getError() == DBERR_NONE) {
+		while (pos + activeDesign->itemHeight - 2 <= tft.height() && db.getError() == DBERR_NONE) {
 			tft.fillRect(0, pos - 1, tft.width(), 18, activeDesign->backgroundColor);
 			pos += activeDesign->itemHeight;
 		}
