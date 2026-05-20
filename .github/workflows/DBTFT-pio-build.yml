@@ -26,26 +26,44 @@ jobs:
       - name: Build PlatformIO Project D1
         run: pio ci -c ./examples/DBTFT/platformio.ini -e d1_mini --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
 
+      - name: Copy ESP8266 firmware
+        run: cp /tmp/pio-build/.pio/build/d1_mini/firmware.bin /tmp/ESP8266-ILI9341.bin
+
       - name: Upload esp8266
         uses: actions/upload-artifact@v4
         with:
           name: ESP8266-ILI9341
-          path: /tmp/pio-build/.pio/build/d1_mini/firmware.bin
+          path: /tmp/ESP8266-ILI9341.bin
 
       - name: Build PlatformIO Project CYD 9341
         run: pio ci -c ./examples/DBTFT/platformio.ini -e 2432s028r --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
+
+      - name: Copy CYD-ILI9341 firmware
+        run: cp /tmp/pio-build/.pio/build/2432s028r/firmware.bin /tmp/CYD-ILI9341.bin
 
       - name: Upload CYD-ILI9341
         uses: actions/upload-artifact@v4
         with:
           name: CYD-ILI9341
-          path: /tmp/pio-build/.pio/build/2432s028r/firmware.bin
+          path: /tmp/CYD-ILI9341.bin
 
       - name: Build PlatformIO Project CYD 7798
         run: pio ci -c ./examples/DBTFT/platformio.ini -e 2432s028r_dualusb --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
+
+      - name: Copy CYD-ST7798 firmware
+        run: cp /tmp/pio-build/.pio/build/2432s028r_dualusb/firmware.bin /tmp/CYD-ST7798.bin
 
       - name: Upload CYD-ST7798
         uses: actions/upload-artifact@v4
         with:
           name: CYD-ST7798
-          path: /tmp/pio-build/.pio/build/2432s028r_dualusb/firmware.bin
+          path: /tmp/CYD-ST7798.bin
+
+      - name: Attach binaries to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            /tmp/ESP8266-ILI9341.bin
+            /tmp/CYD-ILI9341.bin
+            /tmp/CYD-ST7798.bin
