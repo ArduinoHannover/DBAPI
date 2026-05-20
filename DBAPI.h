@@ -56,7 +56,7 @@ enum DBumlaut {
 
 class DBAPI {
 	private:
-		const char* host = "app.vendo.noncd.db.de";
+		const char* host = "app.services-bahn.de";
 		time_t parseTime(const char* t);
 		DBdeparr*  deparr   = NULL;
 		DBstation* stations = NULL;
