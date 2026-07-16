@@ -744,6 +744,13 @@ void setup() {
 	for (uint8_t i = 0; i < 3 && fromStation == NULL; i++) {
 		fromStation = db.getStation(fromStationName);
 	}
+	if (fromStation == NULL) {
+		strncpy(errorMessage, "Station konnte nicht\nabgerufen werden.", sizeof(errorMessage));
+		// No changes made, connection issue? Try to restart.
+		if (doReconfig()) {
+			ESP.restart();
+		}
+	}
 	yield();
 	timeClient.begin();
 	timeClient.setTimeOffset(3600); // CET

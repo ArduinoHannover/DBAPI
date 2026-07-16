@@ -1,12 +1,32 @@
 #include "DBAPI.h"
-#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <Hash.h>
+#ifdef ESP8266
+#include <WiFiClientSecureBearSSL.h>
+#else
+#include <WiFiClientSecure.h>
+#endif
 
 #ifdef DEBUG_ESP_PORT
 #define DB_DEBUG_MSG(...) DEBUG_ESP_PORT.printf( __VA_ARGS__ )
 #else
 #define DB_DEBUG_MSG(...)
+#endif
+
+#ifdef ESP8266
+// Emulate Apple ciphers to combat Akamai filter
+static const uint16_t dbCipherList[] = {
+    BR_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    BR_TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+};
+#else
+static const int dbCipherList[] = {
+    MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    MBEDTLS_TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    0
+};
 #endif
 
 DBAPI::DBAPI() {
@@ -43,7 +63,13 @@ DBstation* DBAPI::getStation(
 		return NULL;
 	}
 	*/
+#ifdef ESP8266
+	BearSSL::WiFiClientSecure client;
+	client.setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
+#else
 	WiFiClientSecure client;
+	client.setCiphersuites(dbCipherList);
+#endif
 	client.setInsecure(); // Don't check fingerprint
 	if (!client.connect(host, 443)) {
 		DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
@@ -212,8 +238,14 @@ DBdeparr* DBAPI::getStationBoard(
 		char* output = (char*)calloc(outputCapacity, sizeof(char));
 		serializeJson(reqDoc, output, outputCapacity);
 
-		// Init new client for each request
+		// Init new client for each request	
+#ifdef ESP8266
+		BearSSL::WiFiClientSecure client;
+		client.setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
+#else
 		WiFiClientSecure client;
+		client.setCiphersuites(dbCipherList);
+#endif
 		client.setInsecure(); // Don't check fingerprint
 		if (!client.connect(host, 443)) {
 			DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
