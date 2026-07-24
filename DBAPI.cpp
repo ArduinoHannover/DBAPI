@@ -65,11 +65,10 @@ DBstation* DBAPI::getStation(
 	*/
 #ifdef ESP8266
 	BearSSL::WiFiClientSecure client;
-	client.setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
 #else
 	WiFiClientSecure client;
-	client.setCiphersuites(dbCipherList);
 #endif
+	client.setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
 	client.setInsecure(); // Don't check fingerprint
 	if (!client.connect(host, 443)) {
 		DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
@@ -241,11 +240,10 @@ DBdeparr* DBAPI::getStationBoard(
 		// Init new client for each request	
 #ifdef ESP8266
 		BearSSL::WiFiClientSecure client;
-		client.setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
 #else
 		WiFiClientSecure client;
-		client.setCiphersuites(dbCipherList);
 #endif
+		client.setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
 		client.setInsecure(); // Don't check fingerprint
 		if (!client.connect(host, 443)) {
 			DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");

@@ -1,6 +1,6 @@
 {
     "name": "DBAPI",
-    "version": "2.4.2",
+    "version": "3.0.0",
     "description": "Hacon/Hafas/DB API for ESP8266 / ESP32 (WiFiClientSecure)",
     "keywords": "train, deutsche bahn, travel",
     "repository":

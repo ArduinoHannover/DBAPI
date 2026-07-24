@@ -44,25 +44,33 @@ jobs:
         run: pio ci -c ./examples/DBTFT/platformio.ini -e 2432s028r --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
 
       - name: Copy CYD-ILI9341 firmware
-        run: cp /tmp/pio-build/.pio/build/2432s028r/firmware.bin /tmp/CYD-ILI9341.bin
+        run: |
+          cp /tmp/pio-build/.pio/build/2432s028r/firmware.bin /tmp/CYD-ILI9341.bin
+          cp /tmp/pio-build/.pio/build/2432s028r/firmware.factory.bin /tmp/CYD-ILI9341-factory.bin
 
       - name: Upload CYD-ILI9341
         uses: actions/upload-artifact@v4
         with:
           name: CYD-ILI9341
-          path: /tmp/CYD-ILI9341.bin
+          path: |
+            /tmp/CYD-ILI9341.bin
+            /tmp/CYD-ILI9341-factory.bin
 
       - name: Build PlatformIO Project CYD 7798
         run: pio ci -c ./examples/DBTFT/platformio.ini -e 2432s028r_dualusb --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
 
       - name: Copy CYD-ST7798 firmware
-        run: cp /tmp/pio-build/.pio/build/2432s028r_dualusb/firmware.bin /tmp/CYD-ST7798.bin
+        run: |
+          cp /tmp/pio-build/.pio/build/2432s028r_dualusb/firmware.bin /tmp/CYD-ST7798.bin
+          cp /tmp/pio-build/.pio/build/2432s028r_dualusb/firmware.factory.bin /tmp/CYD-ST7798-factory.bin
 
       - name: Upload CYD-ST7798
         uses: actions/upload-artifact@v4
         with:
           name: CYD-ST7798
-          path: /tmp/CYD-ST7798.bin
+          path: |
+            /tmp/CYD-ST7798.bin
+            /tmp/CYD-ST7798-factory.bin
 
       - name: Attach binaries to release
         if: startsWith(github.ref, 'refs/tags/')
@@ -71,4 +79,6 @@ jobs:
           files: |
             /tmp/ESP8266-ILI9341.bin
             /tmp/CYD-ILI9341.bin
+            /tmp/CYD-ILI9341-factory.bin
             /tmp/CYD-ST7798.bin
+            /tmp/CYD-ST7798-factory.bin
