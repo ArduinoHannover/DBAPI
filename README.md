@@ -15,6 +15,9 @@ Wenn nicht PlatformIO genutzt wird, werden folgende Bibliotheken zusätzlich ben
 - https://github.com/paulstoffregen/Time
 - https://github.com/bbx10/Hash_tng (nur für ESP32)
 
+Außerdem muss für ESP32 eine angepasste NetworkClientSecure-Bibliothek verwendet werden.
+Diese befindet sich in einem separaten [Branch](https://github.com/ArduinoHannover/arduino-esp32/tree/add-setciphers).
+
 ## Beispielcode
 
 Der DBTFT-Beispielcode ist für einen ESP8266 mit ILI9341 oder ein "Cheap Yellow Display" (ESP32 mit ILI9341 oder ST7798) ausgelegt.
@@ -101,6 +104,7 @@ Mittels bitweiser Oder-Verknüpfung (`|`) können mehrere Verkehrsmittel angefra
 | `realTime` | `time_t` | Tatsächliche Abfahrtszeit als Unix-Timestamp |
 | `delay` | `int16_t` | Verspätung |
 | `cancelled` | `bool` | Zug entfällt |
+| `missingCars` | `bool` | Fehlende Wagen |
 | `platform` | `char[8]` | Geplantes Gleis (ggf. inkl. Abschnitt), sofern existent, sonst leer |
 | `newPlatform` | `char[8]` | Tatsächliches Gleis, sofern geändert, sonst leer |
 | `target` | `char[50]` | Zielhaltestelle |
