@@ -9,6 +9,7 @@ struct DBdeparr {
 	time_t    realTime;
 	int16_t   delay;
 	bool      cancelled;
+	bool      missingCars;
 	char      platform[8];
 	char      newPlatform[8]; 
 	char      target[50];

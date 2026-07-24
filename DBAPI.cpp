@@ -348,12 +348,15 @@ DBdeparr* DBAPI::getStationBoard(
 			}
 			JsonArray arr = doc["echtzeitNotizen"];
 			da->cancelled = false;
+			da->missingCars = false;
 			for (uint8_t i = 0; i < arr.size(); i++) {
-				if (arr[i]["text"].as<String>().equals("Halt entfällt")) {
+				String desc = arr[i]["text"].as<String>();
+				if (desc.equals("Halt entfällt")) {
 					da->cancelled = true;
-					break; // Not interested in other notes right now
+				} else if (desc.indexOf("Wagen fehl") >= 0) {
+					da->missingCars = true;
 				} else {
-					//Serial.println(arr[i]["text"].as<String>());
+					DB_DEBUG_MSG(desc);
 				}
 			}
 			da->time = this->parseTime(doc[abfahrt ? "abgangsDatum" : "ankunftsDatum"]);

@@ -256,6 +256,18 @@ bool drawDeparture(DBdeparr* departure, uint16_t &pos) {
 					tft.print(" +");
 					tft.print(departure->delay);
 				}
+				if (departure->missingCars) {
+					const uint8_t missingCars[] = {
+						0b00000111,
+						0b00000000,
+						0b11111111,
+						0b10000001,
+						0b11111111,
+						0b11111111,
+						0b11000011
+					};
+					tft.drawBitmap(11 * 6 - 5, pos + 8, missingCars, 8, 7, activeDesign->backgroundColor);
+				}
 			}
 			tft.setCursor(2, pos + 8);
 			tft.print(departure->product);
