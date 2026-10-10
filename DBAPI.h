@@ -59,6 +59,7 @@ class DBAPI {
 	private:
 		const char* host = "app.services-bahn.de";
 		time_t parseTime(const char* t);
+		bool checkStatus(Stream& client);
 		DBdeparr*  deparr   = NULL;
 		DBstation* stations = NULL;
 		enum DBumlaut repum = REP_NONE;

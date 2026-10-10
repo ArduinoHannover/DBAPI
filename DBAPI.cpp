@@ -13,6 +13,14 @@
 #define DB_DEBUG_MSG(...)
 #endif
 
+#define DB_USER_AGENT "DBNavigator/iOS/26.12.1"
+
+#ifdef ESP8266
+#define DB_SET_CIPHERS(c) (c).setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]))
+#else
+#define DB_SET_CIPHERS(c) dbSetCiphers((c), dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]), 0)
+#endif
+
 #ifdef ESP8266
 // Emulate Apple ciphers to combat Akamai filter
 static const uint16_t dbCipherList[] = {
@@ -22,11 +30,25 @@ static const uint16_t dbCipherList[] = {
 };
 #else
 static const int dbCipherList[] = {
+    MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
     MBEDTLS_TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     0
 };
+#endif
+
+#ifndef ESP8266
+template <class C>
+static auto dbSetCiphers(C& c, const int* list, size_t len, int) -> decltype(c.setCiphers(list, len), void()) {
+	c.setCiphers(list, len);
+}
+template <class C>
+static void dbSetCiphers(C& c, const int* list, size_t, long) {
+	c.setCiphers(list);
+}
 #endif
 
 DBAPI::DBAPI() {
@@ -68,7 +90,7 @@ DBstation* DBAPI::getStation(
 #else
 	WiFiClientSecure client;
 #endif
-	client.setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
+	DB_SET_CIPHERS(client);
 	client.setInsecure(); // Don't check fingerprint
 	if (!client.connect(host, 443)) {
 		DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
@@ -76,11 +98,20 @@ DBstation* DBAPI::getStation(
 		return NULL;
 	}
 	String json = String("{\"locationTypes\":[\"ST\"],\"searchTerm\":\"") + name + "\"}";
-	client.print(String("POST /mob/location/search HTTP/1.1\r\nConnection: close\r\nX-Correlation-ID: Arduino\r\nContent-Type: application/x.db.vendo.mob.location.v3+json\r\nAccept: application/x.db.vendo.mob.location.v3+json\r\nHost: ") + host +
-		"\r\nContent-Length: " + json.length() + "\r\n\r\n" +
+	client.print(String("POST /mob/location/search HTTP/1.1\r\n") +
+		"Host: " + host + "\r\n" +
+		"User-Agent: " DB_USER_AGENT "\r\n" +
+		"X-Correlation-ID: FOO\r\n" +
+		"Content-Type: application/x.db.vendo.mob.location.v3+json\r\n" +
+		"Accept: application/x.db.vendo.mob.location.v3+json\r\n" +
+		"Content-Length: " + json.length() + "\r\n\r\n" +
 		json
 		);
 	
+	if (!checkStatus(client)) {
+		err = DBERR_RESP_INVALID;
+		return stations;
+	}
 	char endOfHeaders[] = "\r\n\r\n";
 	if (!client.find(endOfHeaders)) {
 		DB_DEBUG_MSG("Did not find headers\n");
@@ -91,7 +122,7 @@ DBstation* DBAPI::getStation(
 	DeserializationError error = deserializeJson(doc, client);
 	if (error) {
 		DB_DEBUG_MSG("deserializeJson() on Station failed");
-		DB_DEBUG_MSG(error.c_str());
+		DB_DEBUG_MSG("%s\n", error.c_str());
 		err = DBERR_DESERIALIZATION_FAILED;
 		return stations;
 	}
@@ -243,7 +274,7 @@ DBdeparr* DBAPI::getStationBoard(
 #else
 		WiFiClientSecure client;
 #endif
-		client.setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
+		DB_SET_CIPHERS(client);
 		client.setInsecure(); // Don't check fingerprint
 		if (!client.connect(host, 443)) {
 			DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
@@ -253,15 +284,19 @@ DBdeparr* DBAPI::getStationBoard(
 		}
 		
 		DB_DEBUG_MSG("DBAPI: Requesting StationBoard.\n");
-		DB_DEBUG_MSG(output);
+		DB_DEBUG_MSG("%s\n", output);
 		client.print(String("POST /mob/bahnhofstafel/") + type + " HTTP/1.1\r\n" +
 			"Host: " + host + "\r\n" +
+			"User-Agent: " DB_USER_AGENT "\r\n" +
+			"X-Correlation-ID: FOO\r\n" +
 			"Content-Type: application/x.db.vendo.mob.bahnhofstafeln.v2+json\r\n" +
 			"Accept: application/x.db.vendo.mob.bahnhofstafeln.v2+json\r\n" +
-			"X-Correlation-ID: Arduino\r\n" +
-			"Content-Length: " + strlen(output) + "\r\n" +
-			"Connection: close\r\n\r\n" + output);
+			"Content-Length: " + strlen(output) + "\r\n\r\n" + output);
 		free(output);
+		if (!checkStatus(client)) {
+			err = DBERR_RESP_INVALID;
+			return deparr;
+		}
 		char endOfHeaders[] = "\r\n\r\n";
 		if (!client.find(endOfHeaders)) {
 			DB_DEBUG_MSG("DBAPI: Did not find headers\n");
@@ -278,11 +313,11 @@ DBdeparr* DBAPI::getStationBoard(
 			DeserializationError error = deserializeJson(doc, client);
 			if (error) {
 				DB_DEBUG_MSG("DBAPI: deserializeJson() on departures/arrivals failed");
-				DB_DEBUG_MSG(error.c_str());
+				DB_DEBUG_MSG("%s\n", error.c_str());
 				//err = DBERR_DESERIALIZATION_FAILED;
 				//return deparr;
 				// No data in array, continue with next hour if selected
-				continue;
+				break;
 			}
 
 			uint8_t current_hash[20];
@@ -354,7 +389,7 @@ DBdeparr* DBAPI::getStationBoard(
 				} else if (desc.indexOf("Wagen fehl") >= 0) {
 					da->missingCars = true;
 				} else {
-					DB_DEBUG_MSG(desc);
+					DB_DEBUG_MSG("%s\n", desc.c_str());
 				}
 			}
 			da->time = this->parseTime(doc[abfahrt ? "abgangsDatum" : "ankunftsDatum"]);
@@ -385,6 +420,29 @@ DBdeparr* DBAPI::getStationBoard(
 		if (year(time) < 2020) break; // Can't query more hours, as there is no valid timestamp
 	}
 	return deparr;
+}
+
+/**
+ * Reads the HTTP status line and checks for 2xx
+ * @return true if the response indicates success
+ */
+bool DBAPI::checkStatus(Stream& client) {
+	// "HTTP/1.1 200 OK"
+	if (!client.find("HTTP/1.1 ")) {
+		DB_DEBUG_MSG("DBAPI: No status line\n");
+		return false;
+	}
+	int code = client.parseInt();
+	if (code < 200 || code > 299) {
+		DB_DEBUG_MSG("DBAPI: HTTP status %d\n", code);
+#ifdef DEBUG_ESP_PORT
+		if (client.find("\r\n\r\n")) {
+			DEBUG_ESP_PORT.println(client.readString());
+		}
+#endif
+		return false;
+	}
+	return true;
 }
 
 /**
