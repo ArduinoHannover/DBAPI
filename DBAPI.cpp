@@ -3,6 +3,8 @@
 #include <Hash.h>
 #ifdef ESP8266
 #include <WiFiClientSecureBearSSL.h>
+#include <new>
+#include <StackThunk.h>
 #else
 #include <WiFiClientSecure.h>
 #endif
@@ -15,9 +17,7 @@
 
 #define DB_USER_AGENT "DBNavigator/iOS/26.12.1"
 
-#ifdef ESP8266
-#define DB_SET_CIPHERS(c) (c).setCiphers(dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]))
-#else
+#ifndef ESP8266
 #define DB_SET_CIPHERS(c) dbSetCiphers((c), dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]), 0)
 #endif
 
@@ -54,6 +54,193 @@ static void dbSetCiphers(C& c, const int* list, size_t, long) {
 }
 #endif
 
+#ifdef ESP8266
+/**
+ * Minimal BearSSL client without certificate validation.
+ * The core's WiFiClientSecure always sends the max_fragment_length extension
+ * (its buffers are smaller than a full TLS record), which the Akamai filter blocks.
+ * Buffers here hold a full record instead, so the extension is left out.
+ * The engine is driven through the core's stack thunks, as the crypto needs more
+ * stack than the sketch has.
+ */
+class DBTLS : public Stream {
+	struct X509 {
+		const br_x509_class* vt;
+		br_x509_decoder_context dc;
+		bool done;
+	};
+	struct Ctx {
+		br_ssl_client_context sc;
+		X509 x509;
+	};
+	static const size_t IN_LEN  = 16384 + 325;
+	static const size_t OUT_LEN = 512 + 85;
+	WiFiClient tcp;
+	Ctx* ctx = NULL;
+	uint8_t* ibuf = NULL;
+	uint8_t* obuf = NULL;
+	int peeked = -1;
+	bool pending = false;
+	bool thunk = false;
+
+	// Accept any certificate, only the public key of the first one is needed
+	static void xStart(const br_x509_class** c, const char*) {
+		X509* x = (X509*)c;
+		br_x509_decoder_init(&x->dc, NULL, NULL, NULL, NULL);
+		x->done = false;
+	}
+	static void xStartCert(const br_x509_class**, uint32_t) {}
+	static void xAppend(const br_x509_class** c, const unsigned char* b, size_t n) {
+		X509* x = (X509*)c;
+		if (!x->done) br_x509_decoder_push(&x->dc, b, n);
+	}
+	static void xEndCert(const br_x509_class** c) { ((X509*)c)->done = true; }
+	static unsigned xEndChain(const br_x509_class** c) { return ((X509*)c)->done ? 0 : 1; }
+	static const br_x509_pkey* xPkey(const br_x509_class* const* c, unsigned* u) {
+		if (u) *u = BR_KEYTYPE_KEYX | BR_KEYTYPE_SIGN;
+		return &((X509*)c)->dc.pkey;
+	}
+
+	// Move records between engine and socket until one of the target states is reached
+	bool run(unsigned target) {
+		br_ssl_engine_context* e = &ctx->sc.eng;
+		for (;;) {
+			optimistic_yield(1000); // handshake crypto is slow, keep the watchdog happy
+			unsigned st = br_ssl_engine_current_state(e);
+			size_t n;
+			if (st & BR_SSL_CLOSED) return false;
+			if (st & BR_SSL_SENDREC) {
+				unsigned char* b = BearSSL::thunk_br_ssl_engine_sendrec_buf(e, &n);
+				size_t w = tcp.write(b, n);
+				if (!w) return false;
+				BearSSL::thunk_br_ssl_engine_sendrec_ack(e, w);
+			} else if (st & target) {
+				return true;
+			} else if (st & BR_SSL_RECVREC) {
+				unsigned char* b = BearSSL::thunk_br_ssl_engine_recvrec_buf(e, &n);
+				for (uint32_t start = millis(); !tcp.available(); delay(1)) {
+					if (!tcp.connected() || millis() - start > 5000) return false;
+				}
+				int r = tcp.read(b, n);
+				if (r <= 0) return false;
+				BearSSL::thunk_br_ssl_engine_recvrec_ack(e, r);
+			} else {
+				br_ssl_engine_flush(e, 0);
+			}
+		}
+	}
+	int fetch() {
+		sendPending();
+		size_t n;
+		if (!ctx || !run(BR_SSL_RECVAPP)) return -1;
+		unsigned char* b = BearSSL::thunk_br_ssl_engine_recvapp_buf(&ctx->sc.eng, &n);
+		int c = b[0];
+		BearSSL::thunk_br_ssl_engine_recvapp_ack(&ctx->sc.eng, 1);
+		return c;
+	}
+	void sendPending() {
+		if (pending && ctx) {
+			br_ssl_engine_flush(&ctx->sc.eng, 0);
+			run(BR_SSL_SENDAPP | BR_SSL_RECVAPP);
+		}
+		pending = false;
+	}
+
+public:
+	~DBTLS() { stop(); }
+
+	bool connect(const char* host, uint16_t port) {
+		stop();
+		ctx = new (std::nothrow) Ctx();
+		ibuf = new (std::nothrow) uint8_t[IN_LEN];
+		obuf = new (std::nothrow) uint8_t[OUT_LEN];
+		if (!ctx || !ibuf || !obuf || !tcp.connect(host, port)) {
+			stop();
+			return false;
+		}
+		tcp.setNoDelay(true);
+		stack_thunk_add_ref();
+		thunk = true;
+		static const br_x509_class vt = {sizeof(X509), xStart, xStartCert, xAppend, xEndCert, xEndChain, xPkey};
+		br_ssl_client_context* sc = &ctx->sc;
+		br_ssl_engine_context* e = &sc->eng;
+		br_ssl_client_zero(sc);
+		br_ssl_engine_add_flags(e, BR_OPT_NO_RENEGOTIATION);
+		br_ssl_engine_set_versions(e, BR_TLS10, BR_TLS12);
+		br_ssl_engine_set_suites(e, dbCipherList, sizeof(dbCipherList) / sizeof(dbCipherList[0]));
+		br_ssl_client_set_default_rsapub(sc);
+		br_ssl_engine_set_default_rsavrfy(e);
+		br_ssl_engine_set_default_ecdsa(e);
+		br_ssl_engine_set_hash(e, br_sha1_ID, &br_sha1_vtable);
+		br_ssl_engine_set_hash(e, br_sha256_ID, &br_sha256_vtable);
+		br_ssl_engine_set_hash(e, br_sha384_ID, &br_sha384_vtable);
+		br_ssl_engine_set_hash(e, br_sha512_ID, &br_sha512_vtable);
+		br_ssl_engine_set_prf10(e, &br_tls10_prf);
+		br_ssl_engine_set_prf_sha256(e, &br_tls12_sha256_prf);
+		br_ssl_engine_set_prf_sha384(e, &br_tls12_sha384_prf);
+		br_ssl_engine_set_default_aes_cbc(e);
+		br_ssl_engine_set_default_aes_gcm(e);
+		br_ssl_engine_set_default_chapol(e);
+		ctx->x509.vt = &vt;
+		br_ssl_engine_set_x509(e, &ctx->x509.vt);
+		br_ssl_engine_set_buffers_bidi(e, ibuf, IN_LEN, obuf, OUT_LEN);
+		e->log_max_frag_len = 14; // 14 = default, do not announce max_fragment_length
+		br_ssl_client_reset(sc, host, 0);
+		if (!run(BR_SSL_SENDAPP | BR_SSL_RECVAPP)) { // runs the handshake
+			DB_DEBUG_MSG("DBTLS: handshake failed, engine error %d\n", br_ssl_engine_last_error(e));
+			stop();
+			return false;
+		}
+		return true;
+	}
+	void stop() {
+		tcp.stop();
+		if (thunk) stack_thunk_del_ref();
+		thunk = false;
+		delete ctx;
+		delete[] ibuf;
+		delete[] obuf;
+		ctx = NULL;
+		ibuf = obuf = NULL;
+		peeked = -1;
+		pending = false;
+	}
+	size_t write(const uint8_t* b, size_t n) override {
+		br_ssl_engine_context* e = &ctx->sc.eng;
+		for (size_t done = 0; done < n;) {
+			size_t len;
+			if (!ctx || !run(BR_SSL_SENDAPP)) return done;
+			unsigned char* buf = BearSSL::thunk_br_ssl_engine_sendapp_buf(e, &len);
+			if (len > n - done) len = n - done;
+			memcpy(buf, b + done, len);
+			BearSSL::thunk_br_ssl_engine_sendapp_ack(e, len);
+			done += len;
+			pending = true;
+		}
+		return n;
+	}
+	size_t write(uint8_t c) override { return write(&c, 1); }
+	void flush() override { sendPending(); }
+	int available() override {
+		size_t n = 0;
+		if (ctx) BearSSL::thunk_br_ssl_engine_recvapp_buf(&ctx->sc.eng, &n);
+		return n + (peeked >= 0);
+	}
+	int read() override {
+		int c = peeked >= 0 ? peeked : fetch();
+		peeked = -1;
+		return c;
+	}
+	int peek() override {
+		if (peeked < 0) peeked = fetch();
+		return peeked;
+	}
+};
+#define DB_CLIENT(c) DBTLS c
+#else
+#define DB_CLIENT(c) WiFiClientSecure c; DB_SET_CIPHERS(c); c.setInsecure() // Don't check fingerprint
+#endif
+
 DBAPI::DBAPI() {
 
 }
@@ -88,13 +275,7 @@ DBstation* DBAPI::getStation(
 		return NULL;
 	}
 	*/
-#ifdef ESP8266
-	BearSSL::WiFiClientSecure client;
-#else
-	WiFiClientSecure client;
-#endif
-	DB_SET_CIPHERS(client);
-	client.setInsecure(); // Don't check fingerprint
+	DB_CLIENT(client);
 	if (!client.connect(host, 443)) {
 		DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
 		err = DBERR_REQ_FAILED;
@@ -272,13 +453,7 @@ DBdeparr* DBAPI::getStationBoard(
 		serializeJson(reqDoc, output, outputCapacity);
 
 		// Init new client for each request	
-#ifdef ESP8266
-		BearSSL::WiFiClientSecure client;
-#else
-		WiFiClientSecure client;
-#endif
-		DB_SET_CIPHERS(client);
-		client.setInsecure(); // Don't check fingerprint
+		DB_CLIENT(client);
 		if (!client.connect(host, 443)) {
 			DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
 			free(output);
