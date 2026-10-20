@@ -2,11 +2,15 @@
 #include <ArduinoJson.h>
 #include <Hash.h>
 #ifdef ESP8266
+#include <ESP8266WiFi.h>
 #include <WiFiClientSecureBearSSL.h>
 #include <new>
 #include <StackThunk.h>
+#include <AddrList.h>
 #else
+#include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <lwip/netdb.h>
 #endif
 
 #ifdef DEBUG_ESP_PORT
@@ -71,17 +75,22 @@ class DBTLS : public Stream {
 	};
 	struct Ctx {
 		br_ssl_client_context sc;
+		br_ec_impl ec;
 		X509 x509;
 	};
 	static const size_t IN_LEN  = 16384 + 325;
 	static const size_t OUT_LEN = 512 + 85;
+	static const size_t THUNK_STACK = 6208; // the core allocates 6200 bytes for BearSSL
+	// Kept between connections: with less than a few kB of heap left, new allocations
+	// of this size fail once the heap is fragmented
+	inline static Ctx* ctx = NULL;
+	inline static uint8_t* ibuf = NULL;
+	inline static uint8_t* obuf = NULL;
+	inline static bool thunk = false;
 	WiFiClient tcp;
-	Ctx* ctx = NULL;
-	uint8_t* ibuf = NULL;
-	uint8_t* obuf = NULL;
+	bool open = false;
 	int peeked = -1;
 	bool pending = false;
-	bool thunk = false;
 
 	// Accept any certificate, only the public key of the first one is needed
 	static void xStart(const br_x509_class** c, const char*) {
@@ -132,35 +141,71 @@ class DBTLS : public Stream {
 	int fetch() {
 		sendPending();
 		size_t n;
-		if (!ctx || !run(BR_SSL_RECVAPP)) return -1;
+		if (!open || !run(BR_SSL_RECVAPP)) return -1;
 		unsigned char* b = BearSSL::thunk_br_ssl_engine_recvapp_buf(&ctx->sc.eng, &n);
 		int c = b[0];
 		BearSSL::thunk_br_ssl_engine_recvapp_ack(&ctx->sc.eng, 1);
 		return c;
 	}
 	void sendPending() {
-		if (pending && ctx) {
+		if (pending && open) {
 			br_ssl_engine_flush(&ctx->sc.eng, 0);
 			run(BR_SSL_SENDAPP | BR_SSL_RECVAPP);
 		}
 		pending = false;
 	}
 
+	// The API is only reliably reachable via IPv6 at times, so try that first if lwIP has it
+	// (needs the PIO_FRAMEWORK_ARDUINO_LWIP2_IPV6_* build flag), then fall back to IPv4
+	bool tcpConnect(const char* host, uint16_t port) {
+		IPAddress ip;
+#if LWIP_IPV4 && LWIP_IPV6
+		static bool noV6 = false;
+		if (!noV6 && !hasGlobalV6()) { // SLAAC takes a moment after connecting
+			for (uint8_t i = 0; i < 50 && !hasGlobalV6(); i++) delay(100);
+			noV6 = !hasGlobalV6();
+		}
+		if (!noV6 && WiFi.hostByName(host, ip, 5000, DNSResolveType::DNS_AddrType_IPv6) && tcp.connect(ip, port)) {
+			DB_DEBUG_MSG("DBTLS: using IPv6 %s\n", ip.toString().c_str());
+			return true;
+		}
+		DB_DEBUG_MSG("DBTLS: using IPv4\n");
+		return WiFi.hostByName(host, ip, 5000, DNSResolveType::DNS_AddrType_IPv4) && tcp.connect(ip, port);
+#else
+		return tcp.connect(host, port);
+#endif
+	}
+#if LWIP_IPV4 && LWIP_IPV6
+	static bool hasGlobalV6() {
+		for (auto a : addrList) {
+			if (a.isV6() && !a.isLocal()) return true;
+		}
+		return false;
+	}
+#endif
+
 public:
 	~DBTLS() { stop(); }
 
 	bool connect(const char* host, uint16_t port) {
 		stop();
-		ctx = new (std::nothrow) Ctx();
-		ibuf = new (std::nothrow) uint8_t[IN_LEN];
-		obuf = new (std::nothrow) uint8_t[OUT_LEN];
-		if (!ctx || !ibuf || !obuf || !tcp.connect(host, port)) {
+		if (!thunk) {
+			// stack_thunk_add_ref() aborts if its stack doesn't fit, so check first and take it before the buffers
+			void* probe = malloc(THUNK_STACK);
+			if (!probe) return false;
+			free(probe);
+			stack_thunk_add_ref();
+			thunk = true;
+		}
+		if (!ctx) ctx = new (std::nothrow) Ctx();
+		if (!ibuf) ibuf = new (std::nothrow) uint8_t[IN_LEN];
+		if (!obuf) obuf = new (std::nothrow) uint8_t[OUT_LEN];
+		if (!ctx || !ibuf || !obuf || !tcpConnect(host, port)) {
 			stop();
 			return false;
 		}
+		open = true;
 		tcp.setNoDelay(true);
-		stack_thunk_add_ref();
-		thunk = true;
 		static const br_x509_class vt = {sizeof(X509), xStart, xStartCert, xAppend, xEndCert, xEndChain, xPkey};
 		br_ssl_client_context* sc = &ctx->sc;
 		br_ssl_engine_context* e = &sc->eng;
@@ -171,7 +216,6 @@ public:
 		br_ssl_client_set_default_rsapub(sc);
 		br_ssl_engine_set_default_rsavrfy(e);
 		br_ssl_engine_set_default_ecdsa(e);
-		br_ssl_engine_set_hash(e, br_sha1_ID, &br_sha1_vtable);
 		br_ssl_engine_set_hash(e, br_sha256_ID, &br_sha256_vtable);
 		br_ssl_engine_set_hash(e, br_sha384_ID, &br_sha384_vtable);
 		br_ssl_engine_set_hash(e, br_sha512_ID, &br_sha512_vtable);
@@ -181,6 +225,13 @@ public:
 		br_ssl_engine_set_default_aes_cbc(e);
 		br_ssl_engine_set_default_aes_gcm(e);
 		br_ssl_engine_set_default_chapol(e);
+		// The filter blocks the fingerprint of the default hello, so deviate: only
+		// P-256/X25519 (no SHA-1 above) and announce HTTP/1.1 via ALPN
+		static const char* alpn[] = {"http/1.1"};
+		ctx->ec = *br_ec_get_default();
+		ctx->ec.supported_curves &= (1UL << BR_EC_secp256r1) | (1UL << BR_EC_curve25519);
+		br_ssl_engine_set_ec(e, &ctx->ec);
+		br_ssl_engine_set_protocol_names(e, alpn, 1);
 		ctx->x509.vt = &vt;
 		br_ssl_engine_set_x509(e, &ctx->x509.vt);
 		br_ssl_engine_set_buffers_bidi(e, ibuf, IN_LEN, obuf, OUT_LEN);
@@ -195,13 +246,7 @@ public:
 	}
 	void stop() {
 		tcp.stop();
-		if (thunk) stack_thunk_del_ref();
-		thunk = false;
-		delete ctx;
-		delete[] ibuf;
-		delete[] obuf;
-		ctx = NULL;
-		ibuf = obuf = NULL;
+		open = false;
 		peeked = -1;
 		pending = false;
 	}
@@ -209,7 +254,7 @@ public:
 		br_ssl_engine_context* e = &ctx->sc.eng;
 		for (size_t done = 0; done < n;) {
 			size_t len;
-			if (!ctx || !run(BR_SSL_SENDAPP)) return done;
+			if (!open || !run(BR_SSL_SENDAPP)) return done;
 			unsigned char* buf = BearSSL::thunk_br_ssl_engine_sendapp_buf(e, &len);
 			if (len > n - done) len = n - done;
 			memcpy(buf, b + done, len);
@@ -223,7 +268,7 @@ public:
 	void flush() override { sendPending(); }
 	int available() override {
 		size_t n = 0;
-		if (ctx) BearSSL::thunk_br_ssl_engine_recvapp_buf(&ctx->sc.eng, &n);
+		if (open) BearSSL::thunk_br_ssl_engine_recvapp_buf(&ctx->sc.eng, &n);
 		return n + (peeked >= 0);
 	}
 	int read() override {
@@ -237,8 +282,42 @@ public:
 	}
 };
 #define DB_CLIENT(c) DBTLS c
+#define DB_CONNECT(c) (c).connect(host, 443)
 #else
 #define DB_CLIENT(c) WiFiClientSecure c; DB_SET_CIPHERS(c); c.setInsecure() // Don't check fingerprint
+#define DB_CONNECT(c) dbConnect(c, host)
+
+/**
+ * The API is only reliably reachable via IPv6 at times. With WiFi.enableIPv6() called before
+ * connecting, the core prefers IPv6 once the network provided a global address, but it has no
+ * IPv4 fallback if that fails, so retry with the IPv4 address here (SNI needs the hostname).
+ */
+static bool dbConnect(WiFiClientSecure& c, const char* host) {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+	static bool noV6 = false;
+	if (!noV6 && !WiFi.STA.hasGlobalIPv6()) {
+		// SLAAC takes a moment after connecting, no link local address within 1 s means IPv6 is off
+		for (uint8_t i = 0; i < 50 && !WiFi.STA.hasGlobalIPv6() && (i < 10 || WiFi.STA.hasLinkLocalIPv6()); i++) delay(100);
+		noV6 = !WiFi.STA.hasGlobalIPv6();
+	}
+	if (c.connect(host, 443)) {
+		DB_DEBUG_MSG("DBAPI: connected to %s\n", c.remoteIP().toString().c_str());
+		return true;
+	}
+	c.stop();
+	struct addrinfo hints = {};
+	struct addrinfo* res;
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	if (lwip_getaddrinfo(host, "443", &hints, &res) != 0) return false;
+	IPAddress ip(((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr);
+	lwip_freeaddrinfo(res);
+	DB_DEBUG_MSG("DBAPI: falling back to IPv4 %s\n", ip.toString().c_str());
+	return c.connect(ip, 443, host, NULL, NULL, NULL);
+#else
+	return c.connect(host, 443);
+#endif
+}
 #endif
 
 DBAPI::DBAPI() {
@@ -276,7 +355,7 @@ DBstation* DBAPI::getStation(
 	}
 	*/
 	DB_CLIENT(client);
-	if (!client.connect(host, 443)) {
+	if (!DB_CONNECT(client)) {
 		DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
 		err = DBERR_REQ_FAILED;
 		return NULL;
@@ -454,7 +533,7 @@ DBdeparr* DBAPI::getStationBoard(
 
 		// Init new client for each request	
 		DB_CLIENT(client);
-		if (!client.connect(host, 443)) {
+		if (!DB_CONNECT(client)) {
 			DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
 			free(output);
 			err = DBERR_REQ_FAILED;

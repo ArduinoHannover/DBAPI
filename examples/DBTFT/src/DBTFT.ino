@@ -660,6 +660,9 @@ void setup() {
 	digitalWrite(17, 1);
 #endif
 	WiFi.mode(WIFI_STA);
+#ifdef ESP32
+	WiFi.enableIPv6(); // The API is at times only reachable via IPv6, DBAPI falls back to IPv4 if needed
+#endif
 	pinMode(BUT_IN, INPUT_PULLUP);
 #ifndef AUTOCONFIG
 	WiFi.mode(WIFI_STA);
