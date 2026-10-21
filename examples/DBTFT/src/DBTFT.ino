@@ -267,6 +267,17 @@ bool drawDeparture(DBdeparr* departure, uint16_t &pos) {
 						0b11000011
 					};
 					tft.drawBitmap(11 * 6 - 5, pos + 8, missingCars, 8, 7, activeDesign->backgroundColor);
+				} else if (departure->highLoad) {
+					const uint8_t highLoad[] = {
+						0b01000010,
+						0b11100111,
+						0b01000010,
+						0b00000000,
+						0b11100111,
+						0b11100111,
+						0b11100111
+					};
+					tft.drawBitmap(11 * 6 - 5, pos + 8, highLoad, 8, 7, activeDesign->backgroundColor);
 				}
 			}
 			tft.setCursor(2, pos + 8);

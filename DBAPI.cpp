@@ -19,6 +19,9 @@
 #define DB_DEBUG_MSG(...)
 #endif
 
+// Responses of the API take over a second at times, the Stream default is 1 s
+#define DB_TIMEOUT 10000
+
 #define DB_USER_AGENT "DBNavigator/iOS/26.12.1"
 
 #ifndef ESP8266
@@ -128,7 +131,7 @@ class DBTLS : public Stream {
 			} else if (st & BR_SSL_RECVREC) {
 				unsigned char* b = BearSSL::thunk_br_ssl_engine_recvrec_buf(e, &n);
 				for (uint32_t start = millis(); !tcp.available(); delay(1)) {
-					if (!tcp.connected() || millis() - start > 5000) return false;
+					if (!tcp.connected() || millis() - start > DB_TIMEOUT) return false;
 				}
 				int r = tcp.read(b, n);
 				if (r <= 0) return false;
@@ -281,10 +284,10 @@ public:
 		return peeked;
 	}
 };
-#define DB_CLIENT(c) DBTLS c
+#define DB_CLIENT(c) DBTLS c; (c).setTimeout(DB_TIMEOUT)
 #define DB_CONNECT(c) (c).connect(host, 443)
 #else
-#define DB_CLIENT(c) WiFiClientSecure c; DB_SET_CIPHERS(c); c.setInsecure() // Don't check fingerprint
+#define DB_CLIENT(c) WiFiClientSecure c; DB_SET_CIPHERS(c); c.setInsecure(); c.setTimeout(DB_TIMEOUT) // Don't check fingerprint
 #define DB_CONNECT(c) dbConnect(c, host)
 
 /**
@@ -371,7 +374,7 @@ DBstation* DBAPI::getStation(
 		json
 		);
 	
-	if (!checkStatus(client)) {
+	if (checkStatus(client) / 100 != 2) {
 		err = DBERR_RESP_INVALID;
 		return stations;
 	}
@@ -531,27 +534,37 @@ DBdeparr* DBAPI::getStationBoard(
 		char* output = (char*)calloc(outputCapacity, sizeof(char));
 		serializeJson(reqDoc, output, outputCapacity);
 
-		// Init new client for each request	
+		// Init new client for each request
 		DB_CLIENT(client);
-		if (!DB_CONNECT(client)) {
-			DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
-			free(output);
-			err = DBERR_REQ_FAILED;
-			return NULL;
+		// The API sometimes drops the connection or answers with 5xx, so try a few times.
+		// 4xx like 429 (rate limit) is not retried, that would only make it worse.
+		int code = -1;
+		for (uint8_t attempt = 0; attempt < 3; attempt++) {
+			if (attempt) {
+				client.stop();
+				delay(500 * attempt);
+			}
+			if (!DB_CONNECT(client)) {
+				DB_DEBUG_MSG("DBAPI: Connection to Host failed.\n");
+				code = -1;
+				continue;
+			}
+			DB_DEBUG_MSG("DBAPI: Requesting StationBoard.\n");
+			DB_DEBUG_MSG("%s\n", output);
+			client.print(String("POST /mob/bahnhofstafel/") + type + " HTTP/1.1\r\n" +
+				"Host: " + host + "\r\n" +
+				"User-Agent: " DB_USER_AGENT "\r\n" +
+				"X-Correlation-ID: FOO\r\n" +
+				"Content-Type: application/x.db.vendo.mob.bahnhofstafeln.v2+json\r\n" +
+				"Accept: application/x.db.vendo.mob.bahnhofstafeln.v2+json\r\n" +
+				"Content-Length: " + strlen(output) + "\r\n\r\n" + output);
+			code = checkStatus(client);
+			if (code / 100 == 2 || (code > 0 && code < 500)) break;
 		}
-		
-		DB_DEBUG_MSG("DBAPI: Requesting StationBoard.\n");
-		DB_DEBUG_MSG("%s\n", output);
-		client.print(String("POST /mob/bahnhofstafel/") + type + " HTTP/1.1\r\n" +
-			"Host: " + host + "\r\n" +
-			"User-Agent: " DB_USER_AGENT "\r\n" +
-			"X-Correlation-ID: FOO\r\n" +
-			"Content-Type: application/x.db.vendo.mob.bahnhofstafeln.v2+json\r\n" +
-			"Accept: application/x.db.vendo.mob.bahnhofstafeln.v2+json\r\n" +
-			"Content-Length: " + strlen(output) + "\r\n\r\n" + output);
 		free(output);
-		if (!checkStatus(client)) {
-			err = DBERR_RESP_INVALID;
+		if (code / 100 != 2) {
+			err = code < 0 ? DBERR_REQ_FAILED : DBERR_RESP_INVALID;
+			// Return so far accumulated array
 			return deparr;
 		}
 		char endOfHeaders[] = "\r\n\r\n";
@@ -639,12 +652,15 @@ DBdeparr* DBAPI::getStationBoard(
 			JsonArray arr = doc["echtzeitNotizen"];
 			da->cancelled = false;
 			da->missingCars = false;
+			da->highLoad = false;
 			for (uint8_t i = 0; i < arr.size(); i++) {
 				String desc = arr[i]["text"].as<String>();
 				if (desc.equals("Halt entfällt")) {
 					da->cancelled = true;
 				} else if (desc.indexOf("Wagen fehl") >= 0) {
 					da->missingCars = true;
+				} else if (desc.indexOf("Hohe Auslastung") >= 0) {
+					da->highLoad = true;
 				} else {
 					DB_DEBUG_MSG("%s\n", desc.c_str());
 				}
@@ -680,14 +696,14 @@ DBdeparr* DBAPI::getStationBoard(
 }
 
 /**
- * Reads the HTTP status line and checks for 2xx
- * @return true if the response indicates success
+ * Reads the HTTP status line
+ * @return HTTP status code, 0 if there was no status line
  */
-bool DBAPI::checkStatus(Stream& client) {
+int DBAPI::checkStatus(Stream& client) {
 	// "HTTP/1.1 200 OK"
 	if (!client.find("HTTP/1.1 ")) {
 		DB_DEBUG_MSG("DBAPI: No status line\n");
-		return false;
+		return 0;
 	}
 	int code = client.parseInt();
 	if (code < 200 || code > 299) {
@@ -697,9 +713,8 @@ bool DBAPI::checkStatus(Stream& client) {
 			DEBUG_ESP_PORT.println(client.readString());
 		}
 #endif
-		return false;
 	}
-	return true;
+	return code;
 }
 
 /**

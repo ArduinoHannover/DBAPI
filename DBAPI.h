@@ -10,6 +10,7 @@ struct DBdeparr {
 	int16_t   delay;
 	bool      cancelled;
 	bool      missingCars;
+	bool      highLoad;
 	char      platform[8];
 	char      newPlatform[8]; 
 	char      target[50];
@@ -59,7 +60,7 @@ class DBAPI {
 	private:
 		const char* host = "app.services-bahn.de";
 		time_t parseTime(const char* t);
-		bool checkStatus(Stream& client);
+		int checkStatus(Stream& client);
 		DBdeparr*  deparr   = NULL;
 		DBstation* stations = NULL;
 		enum DBumlaut repum = REP_NONE;
