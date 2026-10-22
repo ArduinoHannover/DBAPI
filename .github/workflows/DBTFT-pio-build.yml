@@ -25,6 +25,13 @@ jobs:
           pip install --upgrade platformio
           pip install --upgrade intelhex
 
+      # Only builds of a release get the version, only they offer the automatic update
+      - name: Set version for automatic updates
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: echo "#define AUTOUPDATE_VERSION \"$TAG\"" > ./examples/DBTFT/src/fw_version.h
+
       - name: Build PlatformIO Project D1
         run: pio ci -c ./examples/DBTFT/platformio.ini -e d1_mini --build-dir /tmp/pio-build --keep-build-dir ./examples/DBTFT/src
 

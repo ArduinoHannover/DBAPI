@@ -253,6 +253,16 @@ public:
 		peeked = -1;
 		pending = false;
 	}
+	// Free what is kept between connections, no connection may be open
+	static void release() {
+		delete ctx;
+		delete[] ibuf;
+		delete[] obuf;
+		ctx = NULL;
+		ibuf = obuf = NULL;
+		if (thunk) stack_thunk_del_ref();
+		thunk = false;
+	}
 	size_t write(const uint8_t* b, size_t n) override {
 		br_ssl_engine_context* e = &ctx->sc.eng;
 		for (size_t done = 0; done < n;) {
@@ -325,6 +335,12 @@ static bool dbConnect(WiFiClientSecure& c, const char* host) {
 
 DBAPI::DBAPI() {
 
+}
+
+void DBAPI::freeBuffers() {
+#ifdef ESP8266
+	DBTLS::release();
+#endif
 }
 
 /**

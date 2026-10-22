@@ -105,6 +105,11 @@ class DBAPI {
 			uint16_t    productFilter = 1023
 		);
 		DBerror getError();
+		/**
+		 * Frees TLS buffers that are kept between requests (ESP8266 only, ~23 kB), e.g. for
+		 * other HTTPS requests. They are allocated again by the next request. Does nothing on ESP32.
+		 */
+		void freeBuffers();
 		// Output Adafruit GFX compatible Umlauts for default font
 		void setAGFXOutput(bool gfx);
 		void setUmlaut(enum DBumlaut uml);

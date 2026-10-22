@@ -29,6 +29,34 @@
 	const char* otaPassword = "iliketrains";
 	#include <ArduinoOTA.h>
 #endif
+// Automatic updates from the GitHub releases, only in builds of the release workflow: it generates
+// fw_version.h with the tag of the release. Local builds don't have it and never update themselves.
+#if defined(AUTOCONFIG) && __has_include("fw_version.h")
+	#include "fw_version.h"
+	#define AUTOUPDATE
+	#define UPDATE_URL "https://github.com/ArduinoHannover/DBAPI/releases/"
+	#ifdef ESP32
+		#include <HTTPClient.h>
+		#include <HTTPUpdate.h>
+		#include <WiFiClientSecure.h>
+		typedef WiFiClientSecure UpdateClient;
+		#define UPDATER httpUpdate
+		#define FW_VARIANT_PREFIX "CYD-"
+	#else
+		#include <ESP8266HTTPClient.h>
+		#include <ESP8266httpUpdate.h>
+		#include <WiFiClientSecureBearSSL.h>
+		typedef BearSSL::WiFiClientSecure UpdateClient;
+		#define UPDATER ESPhttpUpdate
+		#define FW_VARIANT_PREFIX "ESP8266-"
+	#endif
+	// Name of the binary in the release, see the workflow
+	#ifdef USE_ST7798
+		#define FW_VARIANT FW_VARIANT_PREFIX "ST7798"
+	#else
+		#define FW_VARIANT FW_VARIANT_PREFIX "ILI9341"
+	#endif
+#endif
 char fromStationName[40] = "Hannover Hbf";
 uint16_t filter = PROD_RE | PROD_S;
 
@@ -125,6 +153,10 @@ uint32_t nextBrightness;
 uint32_t scroll;
 time_t old_time;
 bool updateInhibit = false;
+#ifdef AUTOUPDATE
+bool autoUpdateEnabled = true;
+uint32_t nextUpdateCheck = 60000; // one minute after boot, then daily
+#endif
 #ifdef SCROLLING_ENABLED
 bool scrollingEnabled = true;
 #else
@@ -391,6 +423,77 @@ void printScroll(String text, uint16_t y, bool force, bool cancelled) {
 	}
 }
 
+#ifdef AUTOUPDATE
+// true if tag a (vX.Y.Z) is newer than b
+bool isNewerVersion(const char* a, const char* b) {
+	int va[3] = {0, 0, 0}, vb[3] = {0, 0, 0};
+	sscanf(a, "v%d.%d.%d", &va[0], &va[1], &va[2]);
+	sscanf(b, "v%d.%d.%d", &vb[0], &vb[1], &vb[2]);
+	for (uint8_t i = 0; i < 3; i++) {
+		if (va[i] != vb[i]) return va[i] > vb[i];
+	}
+	return false;
+}
+
+void showUpdateMessage(const String& text, uint16_t background) {
+	tft.fillScreen(background);
+	tft.setTextColor(COLOR_WHITE);
+	tft.setCursor(0, 0);
+	tft.setFont();
+	tft.setTextSize(2);
+	tft.println(text);
+}
+
+/**
+ * Checks the latest release on GitHub and installs the binary for this board if it is newer.
+ * The device restarts after a successful update.
+ * Note: The server certificate is not checked (like for the DB API), anyone who can redirect
+ * the traffic could provide a modified binary.
+ * @return false if the latest release could not be determined, to retry earlier
+ */
+bool checkForUpdate() {
+	db.freeBuffers(); // ESP8266: not enough memory for two TLS connections
+	UpdateClient client;
+	client.setInsecure();
+	// /releases/latest redirects to /releases/tag/<tag>, saves parsing the API's JSON
+	String tag;
+	{
+		HTTPClient http;
+		const char* headers[] = {"Location"};
+		http.collectHeaders(headers, 1);
+		http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+		http.setTimeout(10000);
+		if (http.begin(client, UPDATE_URL "latest") && http.GET() == HTTP_CODE_FOUND) {
+			String location = http.header("Location");
+			tag = location.substring(location.lastIndexOf('/') + 1);
+		}
+		http.end();
+	}
+	Serial.print("Latest release: ");
+	Serial.println(tag);
+	if (!tag.length()) {
+		return false;
+	}
+	if (!isNewerVersion(tag.c_str(), AUTOUPDATE_VERSION)) {
+		return true;
+	}
+	updateInhibit = true;
+	showUpdateMessage("Update auf\n" + tag + "...", COLOR_BLACK);
+	UPDATER.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+	UPDATER.rebootOnUpdate(true);
+	t_httpUpdate_return result = UPDATER.update(client, String(UPDATE_URL "download/") + tag + "/" FW_VARIANT ".bin");
+	// Only reached if it failed
+	Serial.print("Update failed: ");
+	Serial.println(UPDATER.getLastErrorString());
+	showUpdateMessage("Update fehlgeschlagen", COLOR_RED);
+	delay(5000);
+	updateInhibit = false;
+	drawStaticContent();
+	nextCheck = 0;
+	return true;
+}
+#endif
+
 #ifdef ENABLEOTA
 void updateStarted() {
 	updateInhibit = true;
@@ -428,6 +531,9 @@ WiFiManagerParameter filterSHIPParameter("filterSHIP", "Schiffe (1 zum Aktiviere
 WiFiManagerParameter filterUParameter("filterU", "U-Bahnen (1 zum Aktieren)", String((filter & PROD_U) > 0).c_str(), 1);
 WiFiManagerParameter filterSTBParameter("filterSTB", "Stra&szlig;enbahnen (1 zum Aktivieren)", String((filter & PROD_STB) > 0).c_str(), 1);
 WiFiManagerParameter filterASTParameter("filterAST", "Anrufpflichtige Verkehre (1 zum Aktivieren)", String((filter & PROD_AST) > 0).c_str(), 1);
+#ifdef AUTOUPDATE
+WiFiManagerParameter autoUpdateParameter("autoUpdate", "Automatische Updates (0 zum Deaktivieren)", "1", 1);
+#endif
 bool shouldSaveConfig = false;
 
 void configModeCallback (WiFiManager *myWiFiManager) {
@@ -468,6 +574,12 @@ void failedConfig() {
 void saveConfigCallback () {
 	shouldSaveConfig = true;
 	Serial.println("New data to save");
+}
+
+// Called when only the settings were saved, without new WLAN credentials
+void saveParamsCallback () {
+	saveConfigCallback();
+	wifiManager.stopConfigPortal(); // the settings are applied after the portal returned
 }
 
 void readParams() {
@@ -554,6 +666,14 @@ void readParams() {
 	} else {
 		Serial.println("File /filter not found");
 	}
+#ifdef AUTOUPDATE
+	if (LittleFS.exists("/autoupdate")) {
+		File f = LittleFS.open("/autoupdate", "r");
+		if (f) {
+			autoUpdateEnabled = f.read() != '0';
+		}
+	}
+#endif
 	Serial.println("Done loading settings.");
 }
 
@@ -621,6 +741,14 @@ void afterConfigCallback() {
 			f.print(ldrParameter.getValue());
 			f.close();
 		}
+#ifdef AUTOUPDATE
+		autoUpdateEnabled = autoUpdateParameter.getValue()[0] != '0';
+		{
+			File f = LittleFS.open("/autoupdate", "w");
+			f.write(autoUpdateEnabled ? '1' : '0');
+			f.close();
+		}
+#endif
 		uint16_t val =
 			(filterICEParameter.getValue()[0]  == '1') * PROD_ICE |
 			(filterICECParameter.getValue()[0] == '1') * PROD_IC_EC |
@@ -721,6 +849,10 @@ void setup() {
 	wifiManager.addParameter(&filterSTBParameter);
 	filterASTParameter.setValue(String((filter & PROD_AST) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterASTParameter);
+#ifdef AUTOUPDATE
+	autoUpdateParameter.setValue(autoUpdateEnabled ? "1" : "0", 1);
+	wifiManager.addParameter(&autoUpdateParameter);
+#endif
 	wifiManager.setSaveConfigCallback(saveConfigCallback);
 	wifiManager.setSaveParamsCallback(saveParamsCallback);
 	wifiManager.setConnectTimeout(30);
@@ -862,6 +994,12 @@ void loop() {
 		scroll++;
 		nextScroll = millis() + SCROLL_INTERVAL;
 	}
+#ifdef AUTOUPDATE
+	if (autoUpdateEnabled && !updateInhibit && (int32_t)(millis() - nextUpdateCheck) >= 0 && WiFi.status() == WL_CONNECTED) {
+		// A day, or an hour if the latest release could not be determined
+		nextUpdateCheck = millis() + (checkForUpdate() ? 24UL * 3600 * 1000 : 3600UL * 1000);
+	}
+#endif
 #ifdef ENABLEOTA
 	ArduinoOTA.handle();
 #endif
