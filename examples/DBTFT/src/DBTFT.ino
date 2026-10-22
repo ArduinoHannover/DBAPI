@@ -603,7 +603,7 @@ void afterConfigCallback() {
 #ifdef SCROLLING_ENABLED
 		scrollingEnabled = scrollingParameter.getValue()[0] == '1';
 		{
-			File f = LittleFS.open("/design", "w");
+			File f = LittleFS.open("/scrolling", "w");
 			f.write(scrollingEnabled);
 			f.close();
 		}
@@ -722,6 +722,7 @@ void setup() {
 	filterASTParameter.setValue(String((filter & PROD_AST) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterASTParameter);
 	wifiManager.setSaveConfigCallback(saveConfigCallback);
+	wifiManager.setSaveParamsCallback(saveParamsCallback);
 	wifiManager.setConnectTimeout(30);
 	wifiManager.setConfigPortalTimeout(120);
 #endif
