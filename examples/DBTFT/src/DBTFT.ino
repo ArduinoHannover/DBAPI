@@ -866,6 +866,11 @@ void setup() {
 	tft.setTextColor(COLOR_WHITE);
 	tft.setRotation(rotation);
 	tft.setTextSize(2);
+#ifdef AUTOUPDATE
+	// Release builds show their version, the connection text starts in the second line
+	tft.println(AUTOUPDATE_VERSION);
+	Serial.println(AUTOUPDATE_VERSION);
+#endif
 	tft.print("Verbinde...");
  	Serial.print("Verbinde...");
 #ifdef AUTOCONFIG
