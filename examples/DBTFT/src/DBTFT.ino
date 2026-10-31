@@ -424,15 +424,17 @@ void printScroll(String text, uint16_t y, bool force, bool cancelled) {
 }
 
 #ifdef AUTOUPDATE
-// true if tag a (vX.Y.Z) is newer than b
+// true if tag a (vX.Y.Z) is newer than b. A letter behind the patch number is a later release
+// of the same version: v3.3.1 < v3.3.1a < v3.3.1b < v3.3.2
 bool isNewerVersion(const char* a, const char* b) {
 	int va[3] = {0, 0, 0}, vb[3] = {0, 0, 0};
-	sscanf(a, "v%d.%d.%d", &va[0], &va[1], &va[2]);
-	sscanf(b, "v%d.%d.%d", &vb[0], &vb[1], &vb[2]);
+	char sa = 0, sb = 0;
+	sscanf(a, "v%d.%d.%d%c", &va[0], &va[1], &va[2], &sa);
+	sscanf(b, "v%d.%d.%d%c", &vb[0], &vb[1], &vb[2], &sb);
 	for (uint8_t i = 0; i < 3; i++) {
 		if (va[i] != vb[i]) return va[i] > vb[i];
 	}
-	return false;
+	return (isalpha(sa) ? sa : 0) > (isalpha(sb) ? sb : 0);
 }
 
 void showUpdateMessage(const String& text, uint16_t background) {
