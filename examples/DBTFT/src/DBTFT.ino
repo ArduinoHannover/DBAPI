@@ -808,7 +808,9 @@ void setup() {
 	WiFi.begin(ssid, password);
 #else
 #ifdef ESP32
-	if (!LittleFS.begin(1)) {
+	// The partition is named littlefs in esp32_4M.csv, but spiffs in the default tables of older
+	// installations (an update keeps the partition table). Formats if it wasn't used before.
+	if (!LittleFS.begin(true, "/littlefs", 10, "littlefs") && !LittleFS.begin(true, "/littlefs", 10, "spiffs")) {
 #else
 	if (!LittleFS.begin()) {
 #endif
