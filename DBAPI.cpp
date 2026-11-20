@@ -619,7 +619,12 @@ DBdeparr* DBAPI::getStationBoard(
 			memcpy(hashes[cnt], current_hash, sizeof(current_hash));
 
 			DBdeparr* da = new DBdeparr();
-			String targ = doc[abfahrt?"richtung":"abgangsOrt"];
+			// "richtung" (departures) is a string, "abgangsOrt" (arrivals) an object
+			// {"locationId":...,"name":...}. Use the name, empty string if missing.
+			JsonVariant tv = doc[abfahrt?"richtung":"abgangsOrt"];
+			String targ;
+			if (tv.is<JsonObject>()) tv = tv["name"];
+			if (tv.is<const char*>()) targ = tv.as<const char*>();
 			
 			switch (repum) {
 				case REP_AGFX:
