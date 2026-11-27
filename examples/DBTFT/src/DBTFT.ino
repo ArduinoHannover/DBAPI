@@ -595,6 +595,9 @@ void readParams() {
 			}
 			if (i < sizeof(fromStationName))
 			fromStationName[i] = 0;
+			if (!fromStationName[0]) {
+				strcpy(fromStationName, "Hannover Hbf"); // empty file, the API rejects an empty search
+			}
 		} else {
 			Serial.println("File /station not open");
 		}
@@ -679,8 +682,52 @@ void readParams() {
 	Serial.println("Done loading settings.");
 }
 
+// Shows the current settings in the portal, WiFiManager empties the fields on invalid requests
+void refreshParameters() {
+	stationNameParameter.setValue(fromStationName, sizeof(fromStationName));
+	rotationParameter.setValue(String(rotation).c_str(), 1);
+	ldrParameter.setValue(String(ldr_pin).c_str(), 2);
+#ifdef SCROLLING_ENABLED
+	scrollingParameter.setValue(String(scrollingEnabled).c_str(), 1);
+#endif
+	designParameter.setValue(String(activeDesign->id).c_str(), 2);
+	filterICEParameter.setValue(String((filter & PROD_ICE) > 0).c_str(), 1);
+	filterICECParameter.setValue(String((filter & PROD_IC_EC) > 0).c_str(), 1);
+	filterIRParameter.setValue(String((filter & PROD_IR) > 0).c_str(), 1);
+	filterREParameter.setValue(String((filter & PROD_RE) > 0).c_str(), 1);
+	filterSParameter.setValue(String((filter & PROD_S) > 0).c_str(), 1);
+	filterBUSParameter.setValue(String((filter & PROD_BUS) > 0).c_str(), 1);
+	filterSHIPParameter.setValue(String((filter & PROD_SHIP) > 0).c_str(), 1);
+	filterUParameter.setValue(String((filter & PROD_U) > 0).c_str(), 1);
+	filterSTBParameter.setValue(String((filter & PROD_STB) > 0).c_str(), 1);
+	filterASTParameter.setValue(String((filter & PROD_AST) > 0).c_str(), 1);
+#ifdef AUTOUPDATE
+	autoUpdateParameter.setValue(autoUpdateEnabled ? "1" : "0", 1);
+#endif
+}
+
+// Closing the config portal switches the WLAN mode, which loses the IPv6 setting. If only the settings were
+// saved, the WLAN stays disconnected too, WiFiManager reconnects only with new credentials.
+void restoreWiFi() {
+	if (WiFi.status() != WL_CONNECTED) {
+		WiFi.reconnect();
+		for (uint8_t i = 0; i < 50 && WiFi.status() != WL_CONNECTED; i++) {
+			delay(200);
+		}
+	}
+#ifdef ESP32
+	WiFi.enableIPv6();
+	// The API is at times only reachable via IPv6, give the network a moment to provide the addresses
+	for (uint8_t i = 0; i < 40 && !WiFi.STA.hasGlobalIPv6() && (i < 10 || WiFi.STA.hasLinkLocalIPv6()); i++) {
+		delay(100);
+	}
+#endif
+}
+
 bool doReconfig() {
+	refreshParameters(); // may be empty after an invalid request
 	bool state = wifiManager.startConfigPortal(apSSID, apPassword);
+	restoreWiFi();
 	afterConfigCallback();
 	drawStaticContent();
 	updateInhibit = false;
@@ -696,7 +743,15 @@ void checkConfigRequest() {
 }
 
 void afterConfigCallback() {
+	if (shouldSaveConfig && stationNameParameter.getValue()[0] == 0) {
+		// e.g. a GET on /wifisave without parameters, WiFiManager then empties all fields
+		Serial.println("Empty configuration ignored");
+		shouldSaveConfig = false;
+		refreshParameters();
+		return;
+	}
 	if (shouldSaveConfig) {
+		shouldSaveConfig = false;
 		{
 			strncpy(fromStationName, stationNameParameter.getValue(), sizeof(fromStationName));
 			Serial.print("Stationsname gesetzt: ");
@@ -821,42 +876,27 @@ void setup() {
 		readParams();
 	}
 	wifiManager.setAPCallback(configModeCallback);
-	stationNameParameter.setValue(fromStationName, sizeof(fromStationName));
 	wifiManager.addParameter(&stationNameParameter);
-	rotationParameter.setValue(String(rotation).c_str(), 1);
 	wifiManager.addParameter(&rotationParameter);
-	ldrParameter.setValue(String(ldr_pin).c_str(), 2);
 	wifiManager.addParameter(&ldrParameter);
 #ifdef SCROLLING_ENABLED
-	scrollingParameter.setValue(String(scrollingEnabled).c_str(), 1);
 	wifiManager.addParameter(&scrollingParameter);
 #endif
-	designParameter.setValue(String(activeDesign->id).c_str(), 2);
 	wifiManager.addParameter(&designParameter);
-	filterICEParameter.setValue(String((filter & PROD_ICE) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterICEParameter);
-	filterICECParameter.setValue(String((filter & PROD_IC_EC) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterICECParameter);
-	filterIRParameter.setValue(String((filter & PROD_IR) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterIRParameter);
-	filterREParameter.setValue(String((filter & PROD_RE) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterREParameter);
-	filterSParameter.setValue(String((filter & PROD_S) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterSParameter);
-	filterBUSParameter.setValue(String((filter & PROD_BUS) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterBUSParameter);
-	filterSHIPParameter.setValue(String((filter & PROD_SHIP) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterSHIPParameter);
-	filterUParameter.setValue(String((filter & PROD_U) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterUParameter);
-	filterSTBParameter.setValue(String((filter & PROD_STB) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterSTBParameter);
-	filterASTParameter.setValue(String((filter & PROD_AST) > 0).c_str(), 1);
 	wifiManager.addParameter(&filterASTParameter);
 #ifdef AUTOUPDATE
-	autoUpdateParameter.setValue(autoUpdateEnabled ? "1" : "0", 1);
 	wifiManager.addParameter(&autoUpdateParameter);
 #endif
+	refreshParameters();
 	wifiManager.setSaveConfigCallback(saveConfigCallback);
 	wifiManager.setSaveParamsCallback(saveParamsCallback);
 	wifiManager.setConnectTimeout(30);
@@ -880,6 +920,7 @@ void setup() {
 		afterConfigCallback(); // try to save either way 
 		failedConfig();
 	}
+	restoreWiFi();
 	afterConfigCallback();
 #else
 	while (WiFi.status() != WL_CONNECTED) {
