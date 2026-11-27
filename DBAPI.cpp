@@ -307,17 +307,26 @@ public:
  */
 static bool dbConnect(WiFiClientSecure& c, const char* host) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
-	static bool noV6 = false;
-	if (!noV6 && !WiFi.STA.hasGlobalIPv6()) {
+	static uint32_t skipWaitUntil = 0;
+	if ((int32_t)(millis() - skipWaitUntil) >= 0 && !WiFi.STA.hasGlobalIPv6()) {
 		// SLAAC takes a moment after connecting, no link local address within 1 s means IPv6 is off
 		for (uint8_t i = 0; i < 50 && !WiFi.STA.hasGlobalIPv6() && (i < 10 || WiFi.STA.hasLinkLocalIPv6()); i++) delay(100);
-		noV6 = !WiFi.STA.hasGlobalIPv6();
+		// Without IPv6 don't wait again for a while. This only skips the waiting, the core
+		// still uses IPv6 as soon as there is a global address.
+		if (!WiFi.STA.hasGlobalIPv6()) skipWaitUntil = millis() + 10 * 60 * 1000;
 	}
-	if (c.connect(host, 443)) {
-		DB_DEBUG_MSG("DBAPI: connected to %s\n", c.remoteIP().toString().c_str());
-		return true;
+	DB_DEBUG_MSG("DBAPI: IPv6 link local %d, global %d (%s)\n", WiFi.STA.hasLinkLocalIPv6(), WiFi.STA.hasGlobalIPv6(), WiFi.STA.globalIPv6().toString().c_str());
+	// Right after reconnecting the global address can be there but not usable yet, so
+	// try IPv6 a few times before falling back to IPv4, which the API is more likely to deny
+	for (uint8_t attempt = 0;; attempt++) {
+		if (c.connect(host, 443)) {
+			DB_DEBUG_MSG("DBAPI: connected to %s\n", c.remoteIP().toString().c_str());
+			return true;
+		}
+		c.stop();
+		if (!WiFi.STA.hasGlobalIPv6() || attempt >= 2) break;
+		delay(1500);
 	}
-	c.stop();
 	struct addrinfo hints = {};
 	struct addrinfo* res;
 	hints.ai_family = AF_INET;
